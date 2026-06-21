@@ -22,8 +22,22 @@ docs/
 
 ## Quick start
 
-See `apps/api/README.md` for the backend, `apps/web/README.md` for the
-frontend. Both have local dev instructions.
+```bash
+# 1. Backend (Postgres + FastAPI in Docker)
+cd apps/api
+docker compose -f docker-compose.dev.yml up -d --build
+docker compose -f docker-compose.dev.yml exec api python -m scripts.seed
+
+# 2. Frontend (Next.js on host)
+cd ../web
+cp .env.example .env.local
+npm install
+npm run dev
+# → http://localhost:3000
+```
+
+See `apps/api/README.md` for backend specifics (migrations, tests),
+`apps/web/README.md` for frontend specifics (shadcn, auth flow, layout).
 
 ## Demo credentials
 
