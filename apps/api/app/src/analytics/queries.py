@@ -19,7 +19,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.src.analytics.schemas import EmployeeFilters
+from app.src.common.schemas import EmployeeFilters
 
 # --- Dimension whitelist (safe to interpolate; values are static) --------
 
@@ -334,3 +334,37 @@ def headcount_change(
         for r in session.execute(text(sql), {"start": start, "end": end}).mappings().all()
     ]
     return {"rows": rows, "dimension": dimension, "start": start, "end": end}
+
+
+# --- Summary (dashboard KPI tiles) ---------------------------------------
+
+
+def summary(session: Session) -> dict:
+    """All four dashboard KPI tile values in a single round-trip.
+
+    Computed inline rather than via the other tools because each tile
+    has a different shape and we want one query, not four.
+    """
+    sql = """
+        SELECT
+            (SELECT count(*) FROM employees WHERE status = 'active')
+                AS active_headcount,
+            (SELECT coalesce(avg(ecs.amount_usd), 0)::numeric(14, 2)
+             FROM employees e
+             JOIN employees_current_salary ecs ON ecs.employee_id = e.id
+             WHERE e.status = 'active')
+                AS avg_salary_usd,
+            (SELECT count(*)
+             FROM employees e
+             JOIN employees_current_salary ecs ON ecs.employee_id = e.id
+             JOIN comp_bands cb ON cb.level_id = e.level_id AND cb.country = e.country
+             WHERE e.status = 'active'
+               AND ecs.amount < cb.band_min)
+                AS below_band_count,
+            (SELECT count(*) FROM employees
+             WHERE status = 'active'
+               AND hire_date >= CURRENT_DATE - INTERVAL '90 days')
+                AS hires_last_90_days
+    """
+    row = session.execute(text(sql)).mappings().one()
+    return dict(row)

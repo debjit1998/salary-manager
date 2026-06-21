@@ -20,7 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.src.analytics import queries as analytics_q
-from app.src.analytics.schemas import EmployeeFilters
+from app.src.common.schemas import EmployeeFilters
 
 from .sql_guard import SqlGuardError, validate_select
 

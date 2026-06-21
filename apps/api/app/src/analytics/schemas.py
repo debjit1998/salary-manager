@@ -8,28 +8,53 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# --- Shared enums --------------------------------------------------------
+from app.src.common.enums import (
+    BandPosition,
+    Country,
+    Dimension,
+    SalaryReason,
+)
+from app.src.common.schemas import EmployeeFilters
 
-Dimension = Literal["department", "level", "country", "employment_type"]
-Country = Literal["US", "UK", "IN"]
-EmploymentType = Literal["full_time", "part_time", "contractor"]
-EmployeeStatus = Literal["active", "terminated"]
-BandPosition = Literal["below", "within", "above"]
-SalaryReason = Literal["hire", "raise", "promo", "adjustment"]
+# Re-export so analytics consumers can keep the existing import paths
+# working (the router imports EmployeeFilters from .schemas).
+__all__ = [
+    "AvgSalaryByResult",
+    "AvgSalaryByRow",
+    "BandSummary",
+    "CompRatioVsBandResult",
+    "DistributionBucket",
+    "EmployeeFilters",
+    "HeadcountByResult",
+    "HeadcountByRow",
+    "HeadcountChangeRequest",
+    "HeadcountChangeResult",
+    "HeadcountChangeRow",
+    "OutOfBandEmployee",
+    "RaiseEvent",
+    "RaisesInPeriodRequest",
+    "RaisesInPeriodResult",
+    "SalaryDistributionResult",
+    "SummaryResult",
+    "TopEarner",
+    "TopEarnersRequest",
+    "TopEarnersResult",
+]
 
 
-class EmployeeFilters(BaseModel):
-    """Common filter set across all analytics tools. None = no filter."""
+# --- summary -------------------------------------------------------------
 
-    country: Country | None = None
-    department_id: int | None = None
-    level_id: int | None = None
-    employment_type: EmploymentType | None = None
-    status: EmployeeStatus = "active"
+
+class SummaryResult(BaseModel):
+    """KPI tiles for the dashboard top row."""
+
+    active_headcount: int
+    avg_salary_usd: Decimal
+    below_band_count: int
+    hires_last_90_days: int
 
 
 # --- headcount_by --------------------------------------------------------

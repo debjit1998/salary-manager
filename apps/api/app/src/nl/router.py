@@ -13,15 +13,13 @@ Pipeline:
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from datetime import date
-from typing import Any, Literal
+from typing import Any
 
 from anthropic import APIError, BadRequestError
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db import engine, get_session
@@ -33,6 +31,14 @@ from .client import (
     DEFAULT_MODEL,
     build_system,
     get_client,
+)
+from .schemas import (
+    NLErrorResponse,
+    NLMeta,
+    NLQueryRequest,
+    NLSqlResponse,
+    NLTextResponse,
+    NLToolResponse,
 )
 from .log import write_log
 from .schema_prompt import build_schema_prompt
@@ -58,53 +64,6 @@ def get_schema_block() -> str:
     if _schema_block is None:
         _schema_block = build_schema_prompt(engine)
     return _schema_block
-
-
-# --- Request / response shapes -------------------------------------------
-
-
-class NLQueryRequest(BaseModel):
-    question: str = Field(min_length=1, max_length=2000)
-
-
-class NLMeta(BaseModel):
-    latency_ms: int
-    input_tokens: int
-    output_tokens: int
-    cache_read_tokens: int = 0
-    cache_creation_tokens: int = 0
-    model: str = DEFAULT_MODEL
-
-
-class NLToolResponse(BaseModel):
-    kind: Literal["tool"]
-    tool: str
-    args: dict[str, Any]
-    result: Any
-    meta: NLMeta
-
-
-class NLSqlResponse(BaseModel):
-    kind: Literal["sql"]
-    sql: str
-    columns: list[str]
-    rows: list[dict[str, Any]]
-    meta: NLMeta
-
-
-class NLTextResponse(BaseModel):
-    """Claude returned plain text instead of a tool call — either it
-    refused or it couldn't answer."""
-
-    kind: Literal["text"]
-    text: str
-    meta: NLMeta
-
-
-class NLErrorResponse(BaseModel):
-    kind: Literal["error"]
-    error: str
-    meta: NLMeta
 
 
 # --- Anthropic content helpers -------------------------------------------

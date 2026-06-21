@@ -9,19 +9,17 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
-# --- Enums (Literal aliases mirror the DB CHECK constraints) -------------
-
-Country = Literal["US", "UK", "IN"]
-Currency = Literal["USD", "GBP", "INR"]
-EmploymentType = Literal["full_time", "part_time", "contractor"]
-EmployeeStatus = Literal["active", "terminated"]
-SalaryReason = Literal["hire", "raise", "promo", "adjustment"]
-BandPosition = Literal["below", "within", "above"]
-
+from app.src.common.enums import (
+    BandPosition,
+    Country,
+    Currency,
+    EmployeeStatus,
+    EmploymentType,
+    SalaryReason,
+)
 
 # --- Nested response objects ---------------------------------------------
 

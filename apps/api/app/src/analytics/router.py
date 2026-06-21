@@ -27,6 +27,7 @@ from app.src.analytics.schemas import (
     RaisesInPeriodRequest,
     RaisesInPeriodResult,
     SalaryDistributionResult,
+    SummaryResult,
     TopEarnersRequest,
     TopEarnersResult,
 )
@@ -55,6 +56,15 @@ def _filters_from_query(
         employment_type=employment_type,
         status=status,
     )
+
+
+@router.get("/summary", response_model=SummaryResult)
+def summary(
+    session: Session = Depends(get_session),
+    _user: CurrentUser = Depends(get_current_user),
+) -> SummaryResult:
+    """KPI tiles for the dashboard top row. One round-trip, four values."""
+    return SummaryResult(**q.summary(session))
 
 
 @router.get("/headcount-by", response_model=HeadcountByResult)
