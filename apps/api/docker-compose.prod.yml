@@ -1,0 +1,56 @@
+# Production stack: Postgres + FastAPI on the EC2.
+# Usage on the EC2 (orchestrated by .github/workflows/api-deploy.yml):
+#   1. docker compose -f docker-compose.prod.yml pull          # refresh image
+#   2. docker compose -f docker-compose.prod.yml run --rm --no-deps api \
+#        alembic upgrade head                                   # migrate
+#   3. docker compose -f docker-compose.prod.yml up -d          # recreate api
+#
+# Required environment (populated on the EC2 from SSM Parameter Store):
+#   API_IMAGE             ECR image URI with tag, e.g. 123.dkr.ecr.us-east-1.amazonaws.com/salary-manager:latest
+#   POSTGRES_USER         e.g. salary
+#   POSTGRES_PASSWORD     long random string
+#   POSTGRES_DB           defaults to salary_manager
+#   DATABASE_URL          postgresql+psycopg://USER:PASS@db:5432/DB
+#   JWT_SECRET            long random string
+#   CORS_ORIGINS          https://your-vercel-domain.app
+#   ANTHROPIC_API_KEY     sk-ant-...
+
+name: salary-manager-api
+
+networks:
+  default:
+    name: salary-manager-api
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: ${POSTGRES_DB:-salary_manager}
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-salary_manager}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    image: ${API_IMAGE:?set API_IMAGE to the ECR image URI:tag}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?required}
+      JWT_SECRET: ${JWT_SECRET:?required}
+      JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-1440}
+      CORS_ORIGINS: ${CORS_ORIGINS:?required}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?required}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata-prod:

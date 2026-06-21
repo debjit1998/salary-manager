@@ -1,0 +1,65 @@
+# Local development stack: Postgres + FastAPI with hot reload.
+# Usage: docker compose -f docker-compose.dev.yml up
+#
+# Every value below is a documented DEFAULT, not a committed secret.
+# Override anything by creating apps/api/.env (gitignored) — see .env.example.
+#
+# Differences from prod (see docker-compose.prod.yml):
+#   - api image is built locally; source code is bind-mounted for --reload
+#   - db port 5432 is exposed to the host for psql access
+#   - dev defaults work out of the box (no .env required)
+
+name: salary-manager-api
+
+networks:
+  default:
+    name: salary-manager-api
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-salary}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-salary}
+      POSTGRES_DB: ${POSTGRES_DB:-salary_manager}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $${POSTGRES_USER:-salary} -d $${POSTGRES_DB:-salary_manager}
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  api:
+    build:
+      context: .
+      target: runtime
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0 --port 8000
+      --reload
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://salary:salary@db:5432/salary_manager}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-not-for-prod}
+      JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-1440}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      HR_USER_EMAIL: ${HR_USER_EMAIL:-hr@acme.org}
+      HR_USER_PASSWORD: ${HR_USER_PASSWORD:-acme-demo-2026}
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./scripts:/app/scripts
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata-dev:
