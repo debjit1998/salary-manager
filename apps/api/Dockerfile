@@ -35,3 +35,20 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# --- Dev: runtime + pytest/ruff/etc + tests dir --------------------------
+# Used by docker-compose.dev.yml so tests can run in the same Python
+# environment as the app, no host venv required. Prod uses `runtime`
+# above, which excludes this layer.
+FROM runtime AS dev
+USER root
+# `/app` was created by WORKDIR as root in the base stage. Pytest needs
+# to write `.pytest_cache/` into it, so make it owned by the app user.
+RUN chown app:app /app
+# requirements-dev.txt starts with `-r requirements.txt`, so both files
+# need to be in the build context for pip to resolve the include.
+COPY requirements.txt requirements-dev.txt ./
+RUN /opt/venv/bin/pip install --no-cache-dir -r requirements-dev.txt
+COPY --chown=app:app pyproject.toml .
+COPY --chown=app:app tests ./tests
+USER app

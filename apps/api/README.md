@@ -17,10 +17,19 @@ curl localhost:8000/health        # {"status":"ok"}
 curl localhost:8000/health/db     # {"db":"up","result":{"ok":1}}
 ```
 
-Open a `psql` shell against the local DB (user/password/db = `salary`):
+Open a `psql` shell against the local DB (host port is 5432 by default
+to avoid colliding with a system Postgres on 5432; user / password / db
+all default to `salary`):
 
 ```bash
-psql -h localhost -U salary -d salary_manager
+psql -h localhost -p 5432 -U salary -d salary_manager
+# password prompt: salary
+```
+
+Or skip the host client entirely:
+
+```bash
+docker compose -f docker-compose.dev.yml exec db psql -U salary -d salary_manager
 ```
 
 ### Optional: override defaults with `.env`
@@ -57,16 +66,67 @@ docker compose -f docker-compose.dev.yml exec api alembic revision -m "add foo t
 docker compose -f docker-compose.dev.yml exec api alembic downgrade -1
 ```
 
-## Tests + lint (outside Docker, faster iteration)
+## Tests
+
+### Layout
+
+```
+tests/
+├── conftest.py                ← top-level: just sets harmless env defaults
+├── unit/                      ← pure-python, no DB, no FastAPI
+│   └── test_auth_primitives.py
+└── integration/               ← real Postgres (in the dev compose stack)
+    ├── conftest.py            ← per-session: creates salary_manager_test DB,
+    │                            drops + re-migrates schema, per-test SAVEPOINT
+    └── test_auth_endpoints.py
+```
+
+### Run inside the dev container (recommended — no host setup needed)
+
+The dev image (`target: dev` in the Dockerfile) layers pytest, ruff,
+and the test directory on top of the runtime image, so the api
+container has everything it needs. The container's `TEST_DATABASE_URL`
+points at `db:5432` (the docker network hostname) automatically.
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+
+docker compose -f docker-compose.dev.yml exec api pytest tests/unit
+docker compose -f docker-compose.dev.yml exec api pytest tests/integration
+docker compose -f docker-compose.dev.yml exec api pytest               # both
+
+# Lint
+docker compose -f docker-compose.dev.yml exec api ruff check .
+docker compose -f docker-compose.dev.yml exec api ruff format --check .
+```
+
+The `tests/` directory is bind-mounted, so editing a test file on the
+host shows up immediately in the next pytest run — no rebuild.
+
+### Or run from the host (faster startup, needs a venv)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-
-ruff check .
-ruff format --check .
-pytest -q                                 # /health/db is skipped if DATABASE_URL is unset
+pytest tests/unit                                    # nothing else needed
+pytest tests/integration                             # needs `docker compose up -d`
 ```
+
+The host-side conftest defaults `TEST_DATABASE_URL` to
+`localhost:5432`. If your `POSTGRES_HOST_PORT` is different:
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://salary:salary@localhost:5433/salary_manager_test \
+  pytest tests/integration
+```
+
+### Why two databases?
+
+Integration tests use a **dedicated** `salary_manager_test` database
+on the same Postgres instance so the seeded 10k-employee dev DB stays
+untouched. Schema is dropped and re-migrated at the start of every
+pytest session; per-test transactions are rolled back, so the suite
+leaves no residue.
 
 ## Production deploy
 
@@ -95,21 +155,37 @@ the deploy is wired up. The trade-off vs. SSM Parameter Store is in
 
 ```
 apps/api/
-  Dockerfile                # multi-stage; single image used by dev and prod
-  docker-compose.dev.yml    # local: source-mount + live reload + exposed ports
-  docker-compose.prod.yml   # EC2: prebuilt image, env from SSM, restart policy
+  Dockerfile                # multi-stage: base → builder → runtime (prod) → dev (tests)
+  docker-compose.dev.yml    # local: source-mount, live reload, exposed ports
+  docker-compose.prod.yml   # EC2: prebuilt image, env from GH Secrets via SSM
   requirements.txt          # runtime deps (pinned)
-  requirements-dev.txt      # dev/test extras
+  requirements-dev.txt      # dev/test extras (pytest, ruff, httpx)
   .env.example              # documented env vars
   pyproject.toml            # ruff + pytest config
   alembic.ini               # Alembic config (URL injected at runtime)
   alembic/
     env.py                  # reads DATABASE_URL via app.settings
-    versions/               # migration files
+    versions/
+      0001_initial_schema.py
+      0002_nl_readonly_role.py
   app/
-    main.py                 # FastAPI app + /health endpoints (more added as we go)
-    settings.py             # Pydantic-settings
-    db.py                   # SQLAlchemy engine + session dependency
-  scripts/                  # one-off scripts (seed, etc.) — added later
-  tests/                    # pytest tests — added later
+    main.py                 # FastAPI app, /health, healthcheck log filter
+    settings.py             # Pydantic-settings (DATABASE_URL + JWT_SECRET required)
+    db.py                   # SQLAlchemy engine + get_session dependency
+    src/
+      router.py             # top-level aggregator that main.py mounts
+      common/
+        auth.py             # bcrypt + JWT helpers, get_current_user dependency
+      user/
+        router.py           # POST /auth/login, /auth/logout, GET /auth/me
+      analytics/            # added in a later task
+  scripts/
+    seed.py                 # idempotent seed: 1 HR user + 10k employees + history
+  tests/
+    conftest.py             # top-level: harmless env defaults for collection
+    unit/
+      test_auth_primitives.py
+    integration/
+      conftest.py           # creates salary_manager_test, migrates, SAVEPOINT
+      test_auth_endpoints.py
 ```

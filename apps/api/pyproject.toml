@@ -22,3 +22,6 @@ addopts = "-q"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+markers = [
+    "integration: tests that hit a real Postgres on localhost:5434 (needs dev compose up)",
+]

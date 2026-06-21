@@ -48,6 +48,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?required}
       JWT_SECRET: ${JWT_SECRET:?required}
       JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-1440}
+      COOKIE_SECURE: "true"
       CORS_ORIGINS: ${CORS_ORIGINS:?required}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?required}
       HR_USER_EMAIL: ${HR_USER_EMAIL:-hr@acme.org}

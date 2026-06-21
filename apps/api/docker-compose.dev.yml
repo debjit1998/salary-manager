@@ -37,17 +37,23 @@ services:
   api:
     build:
       context: .
-      target: runtime
+      target: dev
     command: >
       uvicorn app.main:app
       --host 0.0.0.0 --port 8000
       --reload
+      --reload-dir app
+      --reload-exclude '**/__pycache__/*'
+      --reload-exclude '.pytest_cache/*'
     environment:
       # DATABASE_URL is computed from the POSTGRES_* vars; the container
       # ALWAYS talks to the `db` service on the Docker network (not
       # localhost), so we do NOT take a $DATABASE_URL override here.
       # Override DATABASE_URL in .env only for host-side use (pytest, psql).
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-salary}:${POSTGRES_PASSWORD:-salary}@db:5432/${POSTGRES_DB:-salary_manager}
+      # When pytest runs inside this container, it reaches Postgres via
+      # the docker network hostname `db`, not host's localhost:5432.
+      TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-salary}:${POSTGRES_PASSWORD:-salary}@db:5432/salary_manager_test
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-not-for-prod}
       JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-1440}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
@@ -61,6 +67,8 @@ services:
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini:ro
       - ./scripts:/app/scripts
+      - ./tests:/app/tests
+      - ./pyproject.toml:/app/pyproject.toml:ro
     depends_on:
       db:
         condition: service_healthy

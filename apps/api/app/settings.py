@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 24
 
+    # Set the Secure flag on the session cookie. False for local http;
+    # set True in prod (where the frontend is over https). Without this
+    # the cookie won't be sent cross-origin from the Vercel app.
+    cookie_secure: bool = False
+
     cors_origins: str = "http://localhost:3000"
 
     anthropic_api_key: str | None = None

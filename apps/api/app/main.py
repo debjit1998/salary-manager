@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.settings import settings
+from app.src.router import router as api_router
 
 
 class _HealthCheckFilter(logging.Filter):
@@ -47,3 +48,6 @@ def health() -> dict[str, str]:
 def health_db(session: Session = Depends(get_session)) -> dict[str, object]:
     row = session.execute(text("SELECT 1 AS ok")).mappings().one()
     return {"db": "up", "result": dict(row)}
+
+
+app.include_router(api_router)
