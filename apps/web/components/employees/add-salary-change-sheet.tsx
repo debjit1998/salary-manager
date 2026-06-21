@@ -157,7 +157,7 @@ export function AddSalaryChangeSheet({ employee, open, onOpenChange }: Props) {
         <SheetHeader>
           <SheetTitle>Record a salary change</SheetTitle>
           <SheetDescription>
-            Appends a new row to {employee.first_name}'s salary history.
+            Appends a new row to {employee.first_name}&apos;s salary history.
             This becomes the current salary as of the effective date.
           </SheetDescription>
         </SheetHeader>
@@ -281,7 +281,7 @@ export function AddSalaryChangeSheet({ employee, open, onOpenChange }: Props) {
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      Currently {currentLevelCode}. The employee's level
+                      Currently {currentLevelCode}. The employee&apos;s level
                       will be updated when the promotion is saved.
                     </FormDescription>
                     <FormMessage />

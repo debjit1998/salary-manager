@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -78,7 +77,7 @@ export function EditEmployeeSheet({ employee, open, onOpenChange }: Props) {
         <SheetHeader>
           <SheetTitle>Edit profile</SheetTitle>
           <SheetDescription>
-            Update {employee.first_name} {employee.last_name}'s department,
+            Update {employee.first_name} {employee.last_name}&apos;s department,
             level, employment type, or status.
           </SheetDescription>
         </SheetHeader>

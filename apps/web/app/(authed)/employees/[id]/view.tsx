@@ -108,7 +108,7 @@ export function EmployeeDetailView() {
         </Link>
         <div className="mt-8 rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center text-sm">
           <p className="font-medium text-destructive">
-            Couldn't load employee.
+            Couldn&apos;t load employee.
           </p>
         </div>
       </div>
