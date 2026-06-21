@@ -54,6 +54,10 @@ def test_parse_sort_descending_unknown_key_raises() -> None:
 
 
 # --- build_filters -------------------------------------------------------
+#
+# Multi-select aware: every filter takes a LIST of values. The SQL emits
+# `column = ANY(:bind)` and psycopg adapts Python lists to Postgres
+# ARRAY[...] automatically.
 
 
 def test_build_filters_empty_returns_empty_clause() -> None:
@@ -69,23 +73,35 @@ def test_build_filters_search_query_lowercases_and_wraps_with_wildcards() -> Non
     assert params == {"q": "%alice%"}
 
 
+def test_build_filters_single_value_list_uses_ANY() -> None:
+    where, params = build_filters(country=["UK"])
+    assert "e.country = ANY(:country)" in where
+    assert params == {"country": ["UK"]}
+
+
+def test_build_filters_multi_value_list() -> None:
+    where, params = build_filters(country=["UK", "IN", "US"])
+    assert "e.country = ANY(:country)" in where
+    assert params == {"country": ["UK", "IN", "US"]}
+
+
 def test_build_filters_multiple_conditions_joined_with_AND() -> None:
-    where, params = build_filters(country="UK", level_id=4)
-    # Order matters because we rely on it for the joined string
-    assert "e.country = :country" in where
-    assert "e.level_id = :level_id" in where
+    where, params = build_filters(country=["UK"], level_id=[4])
+    assert "e.country = ANY(:country)" in where
+    assert "e.level_id = ANY(:level_id)" in where
     assert " AND " in where
-    assert params == {"country": "UK", "level_id": 4}
+    assert params == {"country": ["UK"], "level_id": [4]}
 
 
 def test_build_filters_all_filters() -> None:
     where, params = build_filters(
         q="Bob",
-        dept_id=1,
-        country="US",
-        level_id=4,
-        employment_type="full_time",
-        status="active",
+        dept_id=[1],
+        country=["US"],
+        level_id=[4],
+        employment_type=["full_time"],
+        status=["active"],
+        band_position=["within"],
     )
     assert set(params.keys()) == {
         "q",
@@ -94,13 +110,30 @@ def test_build_filters_all_filters() -> None:
         "level_id",
         "employment_type",
         "status",
+        "band_position",
     }
-    # Six conditions = five ANDs in the joined string
-    assert where.count(" AND ") == 5
+    # Seven conditions = six ANDs in the joined string
+    assert where.count(" AND ") == 6
 
 
-def test_build_filters_none_values_are_excluded() -> None:
-    where, params = build_filters(country="US", dept_id=None, level_id=None)
+def test_build_filters_none_and_empty_lists_are_excluded() -> None:
+    """`None` means filter not set; `[]` means filter explicitly empty.
+    Both are dropped from the WHERE clause — emitting `= ANY(ARRAY[])`
+    would match no rows, which isn't what the caller meant.
+    """
+    where, params = build_filters(country=["US"], dept_id=None, level_id=[])
     assert "country" in params
     assert "dept_id" not in params
     assert "level_id" not in params
+
+
+def test_build_filters_band_position_uses_case_expression() -> None:
+    """band_position is the one filter whose condition isn't a simple
+    column reference — it CASE-expressions against ecs/cb columns that
+    the caller's FROM clause must provide.
+    """
+    where, params = build_filters(band_position=["below", "above"])
+    assert "CASE" in where
+    assert "ecs.amount IS NULL OR cb.band_min IS NULL" in where
+    assert "= ANY(:band_position)" in where
+    assert params == {"band_position": ["below", "above"]}
