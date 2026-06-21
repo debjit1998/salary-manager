@@ -16,6 +16,9 @@ export interface EmployeeQueryState {
   level_id?: number[];
   employment_type?: EmploymentType[];
   band_position?: BandPosition[];
+  /** Multi-select USD ranges. Values match
+   *  ALLOWED_SALARY_BANDS in apps/api/app/src/employee/queries.py. */
+  salary_band?: string[];
 }
 
 /** The keys of EmployeeQueryState that are multi-select filter arrays.
@@ -26,7 +29,8 @@ export type FilterKey =
   | "country"
   | "level_id"
   | "employment_type"
-  | "band_position";
+  | "band_position"
+  | "salary_band";
 
 export const DEFAULT_QUERY: EmployeeQueryState = {
   page: 1,

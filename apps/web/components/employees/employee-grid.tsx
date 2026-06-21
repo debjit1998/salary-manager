@@ -105,7 +105,7 @@ export function EmployeeGrid({ rows, isLoading }: Props) {
         minWidth: 220,
         cellRenderer: EmailCell,
         headerComponent: EmployeeColumnHeader,
-        headerComponentParams: { displayName: "Email" },
+        headerComponentParams: { displayName: "Email", sortKey: "email" },
       },
       {
         field: "country",
@@ -140,7 +140,7 @@ export function EmployeeGrid({ rows, isLoading }: Props) {
       {
         field: "current_salary",
         headerName: "Salary (USD)",
-        width: 140,
+        width: 160,
         cellRenderer: SalaryCell,
         cellClass: "ag-right-aligned-cell",
         headerClass: "ag-right-aligned-header",
@@ -148,6 +148,7 @@ export function EmployeeGrid({ rows, isLoading }: Props) {
         headerComponentParams: {
           displayName: "Salary (USD)",
           sortKey: "current_salary_usd",
+          filterKey: "salary_band",
         },
       },
       {

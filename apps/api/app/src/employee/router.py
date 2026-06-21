@@ -128,6 +128,7 @@ def list_employees(
     employment_type: list[str] | None = Query(None),
     status_: list[str] | None = Query(None, alias="status"),
     band_position: list[str] | None = Query(None),
+    salary_band: list[str] | None = Query(None),
     session: Session = Depends(get_session),
     _user: CurrentUser = Depends(get_current_user),
 ) -> EmployeeListResponse:
@@ -144,6 +145,7 @@ def list_employees(
             employment_type=employment_type,
             status=status_,
             band_position=band_position,
+            salary_band=salary_band,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

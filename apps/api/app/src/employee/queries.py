@@ -21,10 +21,24 @@ ALLOWED_SORTS: dict[str, str] = {
     "employee_no": "e.employee_no",
     "first_name": "e.first_name",
     "last_name": "e.last_name",
+    "email": "e.email",
     "hire_date": "e.hire_date",
     "level": "l.rank",
     "current_salary_usd": "ecs.amount_usd",
 }
+
+# Salary-band filter buckets — USD-equivalent ranges. The keys are
+# what the FE sends and what we match in SQL via a CASE expression;
+# the FE renders human-readable labels next to each key.
+ALLOWED_SALARY_BANDS: tuple[str, ...] = (
+    "0-10000",
+    "10000-50000",
+    "50000-100000",
+    "100000-150000",
+    "150000-200000",
+    "200000-300000",
+    "300000+",
+)
 
 
 def parse_sort(sort: str | None) -> tuple[str, str]:
@@ -54,6 +68,7 @@ def build_filters(
     employment_type: list[str] | None = None,
     status: list[str] | None = None,
     band_position: list[str] | None = None,
+    salary_band: list[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Build a parameterised WHERE clause + bind params.
 
@@ -99,6 +114,22 @@ def build_filters(
             "END) = ANY(:band_position)"
         )
         params["band_position"] = band_position
+    if salary_band:
+        # USD-band bucketing. Same CASE pattern as band_position so
+        # multi-select via `= ANY(:salary_band)` Just Works.
+        conds.append(
+            "(CASE "
+            "  WHEN ecs.amount_usd IS NULL THEN NULL "
+            "  WHEN ecs.amount_usd < 10000 THEN '0-10000' "
+            "  WHEN ecs.amount_usd < 50000 THEN '10000-50000' "
+            "  WHEN ecs.amount_usd < 100000 THEN '50000-100000' "
+            "  WHEN ecs.amount_usd < 150000 THEN '100000-150000' "
+            "  WHEN ecs.amount_usd < 200000 THEN '150000-200000' "
+            "  WHEN ecs.amount_usd < 300000 THEN '200000-300000' "
+            "  ELSE '300000+' "
+            "END) = ANY(:salary_band)"
+        )
+        params["salary_band"] = salary_band
 
     return " AND ".join(conds), params
 
@@ -158,6 +189,7 @@ def list_employees(
     employment_type: list[str] | None = None,
     status: list[str] | None = None,
     band_position: list[str] | None = None,
+    salary_band: list[str] | None = None,
 ) -> tuple[list[dict], int]:
     """Return (rows, total). Caller maps rows to Pydantic models."""
     column, direction = parse_sort(sort)
@@ -169,6 +201,7 @@ def list_employees(
         employment_type=employment_type,
         status=status,
         band_position=band_position,
+        salary_band=salary_band,
     )
 
     where_clause = f"WHERE {where_body}" if where_body else ""

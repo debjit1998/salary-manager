@@ -154,11 +154,15 @@ export interface EquityGrantCreate {
 // --- Analytics -----------------------------------------------------------
 
 export interface EmployeeFilters {
-  country?: Country;
-  department_id?: number;
-  level_id?: number;
-  employment_type?: EmploymentType;
-  status?: EmployeeStatus;
+  country?: Country[];
+  department_id?: number[];
+  level_id?: number[];
+  employment_type?: EmploymentType[];
+  status?: EmployeeStatus[];
+  /** USD-band buckets — same values as the employees grid's
+   *  `salary_band` filter (see employees/column-filter.tsx). */
+  salary_band?: string[];
+  band_position?: BandPosition[];
 }
 
 export interface HeadcountByResult {

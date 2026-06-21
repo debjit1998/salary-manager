@@ -35,6 +35,18 @@ const BAND_OPTIONS: Option[] = [
   { value: "above", label: "Above band" },
 ];
 
+// USD-band buckets — values must match ALLOWED_SALARY_BANDS in the
+// backend (apps/api/app/src/employee/queries.py).
+const SALARY_BAND_OPTIONS: Option[] = [
+  { value: "0-10000", label: "< $10k" },
+  { value: "10000-50000", label: "$10k – $50k" },
+  { value: "50000-100000", label: "$50k – $100k" },
+  { value: "100000-150000", label: "$100k – $150k" },
+  { value: "150000-200000", label: "$150k – $200k" },
+  { value: "200000-300000", label: "$200k – $300k" },
+  { value: "300000+", label: "$300k+" },
+];
+
 /** Multi-select filter. Empty selection == no filter. */
 export function ColumnFilter({ filterKey, title }: Props) {
   const { state, update, lookups } = useEmployeesCtx();
@@ -43,6 +55,7 @@ export function ColumnFilter({ filterKey, title }: Props) {
     if (filterKey === "country") return COUNTRY_OPTIONS;
     if (filterKey === "employment_type") return EMPLOYMENT_OPTIONS;
     if (filterKey === "band_position") return BAND_OPTIONS;
+    if (filterKey === "salary_band") return SALARY_BAND_OPTIONS;
     if (filterKey === "dept_id") {
       return (lookups?.departments ?? []).map((d) => ({
         value: d.id,

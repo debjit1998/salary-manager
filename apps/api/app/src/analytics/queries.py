@@ -63,24 +63,72 @@ def _dimension(name: str) -> dict[str, str]:
 def _build_employee_where(
     filters: EmployeeFilters | None, *, alias: str = "e"
 ) -> tuple[str, dict[str, Any]]:
-    """Build a WHERE body (no 'WHERE' prefix) from EmployeeFilters."""
+    """Build a WHERE body (no 'WHERE' prefix) from EmployeeFilters.
+
+    Every filter uses `= ANY(:bind)` so the same code path handles
+    single-value and multi-select input. Status defaults to 'active'
+    when not provided (the common case for the dashboard).
+
+    `salary_band` and `band_position` require the calling query to have
+    LEFT-JOINed `employees_current_salary` (alias `ecs`) and
+    `comp_bands` (alias `cb`). The analytics functions below do that
+    by default."""
     if filters is None:
         filters = EmployeeFilters()
-    conds: list[str] = [f"{alias}.status = :status"]
-    params: dict[str, Any] = {"status": filters.status}
-    if filters.country is not None:
-        conds.append(f"{alias}.country = :country")
+    conds: list[str] = []
+    params: dict[str, Any] = {}
+
+    # Status default — applied inline when no filter, no bind parameter.
+    if filters.status:
+        conds.append(f"{alias}.status = ANY(:status)")
+        params["status"] = filters.status
+    else:
+        conds.append(f"{alias}.status = 'active'")
+    if filters.country:
+        conds.append(f"{alias}.country = ANY(:country)")
         params["country"] = filters.country
-    if filters.department_id is not None:
-        conds.append(f"{alias}.department_id = :department_id")
+    if filters.department_id:
+        conds.append(f"{alias}.department_id = ANY(:department_id)")
         params["department_id"] = filters.department_id
-    if filters.level_id is not None:
-        conds.append(f"{alias}.level_id = :level_id")
+    if filters.level_id:
+        conds.append(f"{alias}.level_id = ANY(:level_id)")
         params["level_id"] = filters.level_id
-    if filters.employment_type is not None:
-        conds.append(f"{alias}.employment_type = :employment_type")
+    if filters.employment_type:
+        conds.append(f"{alias}.employment_type = ANY(:employment_type)")
         params["employment_type"] = filters.employment_type
+    if filters.salary_band:
+        conds.append(
+            "(CASE "
+            "  WHEN ecs.amount_usd IS NULL THEN NULL "
+            "  WHEN ecs.amount_usd < 10000 THEN '0-10000' "
+            "  WHEN ecs.amount_usd < 50000 THEN '10000-50000' "
+            "  WHEN ecs.amount_usd < 100000 THEN '50000-100000' "
+            "  WHEN ecs.amount_usd < 150000 THEN '100000-150000' "
+            "  WHEN ecs.amount_usd < 200000 THEN '150000-200000' "
+            "  WHEN ecs.amount_usd < 300000 THEN '200000-300000' "
+            "  ELSE '300000+' "
+            "END) = ANY(:salary_band)"
+        )
+        params["salary_band"] = filters.salary_band
+    if filters.band_position:
+        conds.append(
+            "(CASE "
+            "  WHEN ecs.amount IS NULL OR cb.band_min IS NULL THEN NULL "
+            "  WHEN ecs.amount < cb.band_min THEN 'below' "
+            "  WHEN ecs.amount > cb.band_max THEN 'above' "
+            "  ELSE 'within' "
+            "END) = ANY(:band_position)"
+        )
+        params["band_position"] = filters.band_position
     return " AND ".join(conds), params
+
+
+# JOIN clauses for the salary view and comp bands — used by every
+# analytics function so all seven filters work uniformly.
+_FILTER_JOINS = """
+LEFT JOIN employees_current_salary ecs ON ecs.employee_id = e.id
+LEFT JOIN comp_bands cb ON cb.level_id = e.level_id AND cb.country = e.country
+"""
 
 
 # --- Tool 1: headcount_by ------------------------------------------------
@@ -95,6 +143,7 @@ def headcount_by(
         SELECT {spec['select']} AS dimension, count(*) AS count
         FROM employees e
         {spec['join']}
+        {_FILTER_JOINS}
         WHERE {where}
         GROUP BY {spec['group_by']}
         ORDER BY {spec['order_by']}
@@ -120,8 +169,8 @@ def avg_salary_by(
                 AS median_salary_usd,
             count(*) AS count
         FROM employees e
-        JOIN employees_current_salary ecs ON ecs.employee_id = e.id
         {spec['join']}
+        {_FILTER_JOINS}
         WHERE {where}
         GROUP BY {spec['group_by']}
         ORDER BY {spec['order_by']}
@@ -151,8 +200,9 @@ def salary_distribution(
     sql = f"""
         SELECT ecs.amount_usd
         FROM employees e
-        JOIN employees_current_salary ecs ON ecs.employee_id = e.id
+        {_FILTER_JOINS}
         WHERE {where}
+          AND ecs.amount_usd IS NOT NULL
     """
     amounts = [r[0] for r in session.execute(text(sql), params).all()]
 
@@ -190,10 +240,11 @@ def top_n_earners(
             ecs.amount                AS amount_native,
             ecs.currency_code
         FROM employees e
-        JOIN employees_current_salary ecs ON ecs.employee_id = e.id
         JOIN departments d ON d.id = e.department_id
         JOIN levels      l ON l.id = e.level_id
+        {_FILTER_JOINS}
         WHERE {where}
+          AND ecs.amount_usd IS NOT NULL
         ORDER BY ecs.amount_usd DESC, e.employee_no ASC
         LIMIT :n
     """

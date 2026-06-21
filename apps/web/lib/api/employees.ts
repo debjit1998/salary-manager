@@ -23,6 +23,7 @@ export interface ListEmployeesParams {
   employment_type?: string[];
   status?: string[];
   band_position?: string[];
+  salary_band?: string[];
 }
 
 export const employeesApi = {

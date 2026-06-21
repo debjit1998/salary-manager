@@ -37,24 +37,28 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 def _filters_from_query(
-    country: str | None = Query(None, pattern="^(US|UK|IN)$"),
-    department_id: int | None = Query(None),
-    level_id: int | None = Query(None),
-    employment_type: str | None = Query(
-        None, pattern="^(full_time|part_time|contractor)$"
-    ),
-    status: str | None = Query(
-        "active", pattern="^(active|terminated)$"
-    ),
+    country: list[str] | None = Query(None),
+    department_id: list[int] | None = Query(None),
+    level_id: list[int] | None = Query(None),
+    employment_type: list[str] | None = Query(None),
+    status: list[str] | None = Query(None),
+    salary_band: list[str] | None = Query(None),
+    band_position: list[str] | None = Query(None),
 ) -> EmployeeFilters:
     """Reusable dependency that gathers the standard employee filters
-    from query string into an EmployeeFilters model."""
+    from the query string into an EmployeeFilters model.
+
+    Every filter accepts repeated keys (`?country=US&country=UK`) so
+    the dashboard's per-chart filter dialog can multi-select. A single
+    value still works (FastAPI parses `?country=US` as `["US"]`)."""
     return EmployeeFilters(
         country=country,
         department_id=department_id,
         level_id=level_id,
         employment_type=employment_type,
         status=status,
+        salary_band=salary_band,
+        band_position=band_position,
     )
 
 

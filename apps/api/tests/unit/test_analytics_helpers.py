@@ -13,7 +13,7 @@ from app.src.analytics.queries import (
     _build_employee_where,
     _dimension,
 )
-from app.src.analytics.schemas import EmployeeFilters
+from app.src.common.schemas import EmployeeFilters
 
 
 # --- _dimension ----------------------------------------------------------
@@ -36,28 +36,37 @@ def test_dimension_unknown_raises() -> None:
 
 
 def test_where_default_filters_to_active_only() -> None:
+    """No filter → status pinned to 'active' inline (no bind param)."""
     where, params = _build_employee_where(None)
-    assert where == "e.status = :status"
-    assert params == {"status": "active"}
+    assert "e.status = 'active'" in where
+    assert params == {}
 
 
-def test_where_includes_country() -> None:
-    where, params = _build_employee_where(EmployeeFilters(country="UK"))
-    assert "e.country = :country" in where
-    assert params == {"status": "active", "country": "UK"}
+def test_where_includes_country_list() -> None:
+    where, params = _build_employee_where(EmployeeFilters(country=["UK"]))
+    assert "e.country = ANY(:country)" in where
+    assert params == {"country": ["UK"]}
 
 
-def test_where_includes_all_filters_with_AND() -> None:
+def test_where_country_multi_select() -> None:
+    where, params = _build_employee_where(
+        EmployeeFilters(country=["US", "UK"])
+    )
+    assert "e.country = ANY(:country)" in where
+    assert params == {"country": ["US", "UK"]}
+
+
+def test_where_includes_all_scalar_filters_with_AND() -> None:
     where, params = _build_employee_where(
         EmployeeFilters(
-            country="US",
-            department_id=1,
-            level_id=4,
-            employment_type="full_time",
-            status="active",
+            country=["US"],
+            department_id=[1],
+            level_id=[4],
+            employment_type=["full_time"],
+            status=["active"],
         )
     )
-    # 5 conditions => 4 ANDs in the joined string
+    # 5 conditions → 4 ANDs
     assert where.count(" AND ") == 4
     assert set(params.keys()) == {
         "status",
@@ -68,12 +77,43 @@ def test_where_includes_all_filters_with_AND() -> None:
     }
 
 
-def test_where_status_terminated_is_passed_through() -> None:
-    where, params = _build_employee_where(EmployeeFilters(status="terminated"))
-    assert params["status"] == "terminated"
+def test_where_status_explicit_is_passed_through() -> None:
+    where, params = _build_employee_where(EmployeeFilters(status=["terminated"]))
+    assert "e.status = ANY(:status)" in where
+    assert params["status"] == ["terminated"]
+
+
+def test_where_status_empty_list_falls_back_to_active() -> None:
+    """An empty list is treated like 'no filter' — defaults to active."""
+    where, params = _build_employee_where(EmployeeFilters(status=[]))
+    assert "e.status = 'active'" in where
+    assert "status" not in params
 
 
 def test_where_alias_override() -> None:
-    where, _ = _build_employee_where(EmployeeFilters(country="US"), alias="emp")
-    assert "emp.country = :country" in where
-    assert "emp.status = :status" in where
+    where, _ = _build_employee_where(
+        EmployeeFilters(country=["US"]), alias="emp"
+    )
+    assert "emp.country = ANY(:country)" in where
+    assert "emp.status = 'active'" in where
+
+
+def test_where_salary_band_uses_case_expression() -> None:
+    """salary_band is a synthetic filter — a CASE over ecs.amount_usd."""
+    where, params = _build_employee_where(
+        EmployeeFilters(salary_band=["100000-150000", "150000-200000"])
+    )
+    assert "CASE" in where
+    assert "ecs.amount_usd" in where
+    assert "= ANY(:salary_band)" in where
+    assert params["salary_band"] == ["100000-150000", "150000-200000"]
+
+
+def test_where_band_position_uses_case_expression() -> None:
+    where, params = _build_employee_where(
+        EmployeeFilters(band_position=["below", "above"])
+    )
+    assert "CASE" in where
+    assert "cb.band_min" in where
+    assert "= ANY(:band_position)" in where
+    assert params["band_position"] == ["below", "above"]
