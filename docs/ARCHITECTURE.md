@@ -178,7 +178,7 @@
     │                  │  else (no tool):   │                      │
     │                  │    sqlglot guard   │                      │
     │                  │    + read-only DB  │                      │
-    │                  │    role + 3s       │                      │
+    │                  │    role + 10s      │                      │
     │                  │    statement_      │                      │
     │                  │    timeout         ├─────────────────────▶│
     │                  │                    │                      │
@@ -197,7 +197,7 @@
 - **The SQL fallback prevents "I don't know" dead-ends** on the long tail.
   Guarded by sqlglot (single `SELECT`, no DML, no DDL), a read-only DB
   role (no write grants regardless of what SQL is generated), and a
-  3-second `statement_timeout`.
+  10-second `statement_timeout`.
 - **The trade-off** is documented in `TRADEOFFS.md`.
 
 ### How Claude knows the schema (auto-derived + hints)

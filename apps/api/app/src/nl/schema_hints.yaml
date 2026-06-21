@@ -1,0 +1,104 @@
+# Semantic hints merged with information_schema introspection to build
+# the NL endpoint's system-prompt schema block. Edit this file when
+# semantics change (new enum values, new "prefer-this-view" guidance,
+# new append-only invariants). Structural changes (new columns, new
+# tables) flow in automatically.
+#
+# A startup validator refuses to boot if any column/table referenced
+# here no longer exists in the DB — keeps the hints from rotting.
+
+employees:
+  notes:
+    - "Primary employee directory. The application's source of truth for
+       who is employed and their team / level / country."
+    - "Default to status = 'active' unless the question explicitly asks
+       about terminated employees."
+  columns:
+    country:
+      description: "ISO-2 country code"
+      values: [US, UK, IN]
+    employment_type:
+      values: [full_time, part_time, contractor]
+    status:
+      values: [active, terminated]
+    manager_id: "Self-reference. NULL = top-of-chain (no manager)."
+
+salary_changes:
+  notes:
+    - "APPEND-ONLY. Never UPDATE or DELETE. Corrections are new rows
+       with reason='adjustment'."
+    - "Current salary = the latest row per employee. PREFER the
+       employees_current_salary view; do NOT aggregate this table
+       directly to derive current pay."
+  columns:
+    amount: "Annual gross base salary in the native currency"
+    currency_code: "Always matches employees.country's currency
+       (US→USD, UK→GBP, IN→INR)."
+    effective_date: "Date this salary takes effect. The CURRENT salary
+       is the row with the latest effective_date <= today; future-dated
+       rows are scheduled but not yet active."
+    reason:
+      description: "What triggered this comp change"
+      values: [hire, raise, promo, adjustment]
+
+equity_grants:
+  notes:
+    - "APPEND-ONLY. Each row is one grant event."
+    - "An employee's current share count = SUM(shares) grouped by
+       employee_id."
+  columns:
+    shares: "DELTA — the size of this single grant, NOT a running
+       total. SUM across an employee_id to get their total."
+    grant_date: "Date the equity was granted (vesting / strike-price
+       schedules are not modelled)."
+
+employees_current_salary:
+  kind: view
+  notes:
+    - "Latest salary_changes row per employee with amount_usd
+       pre-computed via JOIN to currencies."
+    - "PREFER this over raw salary_changes for any 'current pay'
+       question. Includes employee_id, amount (native), currency_code,
+       amount_usd, effective_date."
+
+comp_bands:
+  notes:
+    - "Salary band per (level_id, country) in native currency."
+    - "Comp ratio = ecs.amount / cb.band_mid."
+    - "Band position: amount < band_min → below; > band_max → above;
+       otherwise within."
+  columns:
+    band_min: "Minimum of the band, in the row's currency_code
+       (== employees.country's currency). Compare against the same
+       currency only — don't compare a USD salary to a GBP band."
+    band_mid: "Midpoint of the band (used as denominator for comp_ratio)."
+    band_max: "Maximum of the band, in the row's currency_code."
+
+currencies:
+  notes:
+    - "Fixed FX ratios captured 2026-06-21."
+    - "ratio_to_usd values: USD=1.000000, GBP=0.755800, INR=94.460000."
+    - "USD-equivalent of any native amount: amount / ratio_to_usd."
+
+departments:
+  notes:
+    - "Reference enum-like table. Filter by department_id; join for the name."
+
+levels:
+  notes:
+    - "L1..L7 career ladder."
+  columns:
+    code: "Display name (e.g. 'L4'). Use for grouping/output."
+    rank: "Numeric order — L1=1 ... L7=7. Sort by this for level
+       ordering (alphabetical 'L10' would sort before 'L2')."
+
+users:
+  notes:
+    - "App-side HR-manager accounts. Not employee records — do not join
+       to `employees`. Exclude from people-related queries."
+
+nl_query_log:
+  notes:
+    - "Internal audit log for this NL feature itself. Do not query
+       unless the user is explicitly asking about the NL feature's
+       usage / performance."

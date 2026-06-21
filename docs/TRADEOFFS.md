@@ -126,7 +126,7 @@ Postgres role behind a sqlglot guard.
   tail a controlled escape hatch.
 
 **Cost:** More code paths to maintain and test. Mitigated by keeping
-the fallback narrow (single SELECT, read-only role, 3 s timeout, forced
+the fallback narrow (single SELECT, read-only role, 10 s timeout, forced
 LIMIT) and logging every NL query for review.
 
 ## Native-currency-only storage; USD computed at query time
