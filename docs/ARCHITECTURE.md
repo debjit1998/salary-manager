@@ -31,9 +31,14 @@
   pulls during deploys). `t4g.micro` would save $6/mo but leaves
   Postgres uncomfortably close to the OOM line. Reasoning written up
   in `TRADEOFFS.md`.
-- **Secrets** (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `JWT_SECRET`) live in
-  **AWS SSM Parameter Store** and are fetched on the EC2 itself. They
-  never appear in CI logs or GitHub secrets.
+- **Secrets** (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `JWT_SECRET`,
+  `HR_USER_PASSWORD`, the Postgres creds) live in **GitHub Encrypted
+  Secrets** and are injected into the deploy job at run time. The
+  deploy job authenticates to AWS via **OIDC** (no long-lived AWS keys
+  in GitHub) and ships the secrets to the EC2 via **SSM Run-Command**.
+  Secrets are masked in workflow logs, fork-PRs cannot read them, and
+  the running container holds them only in process env. The reasoning
+  vs. full SSM Parameter Store is captured in `TRADEOFFS.md`.
 - **Migrations** are Alembic with raw `op.execute(...)` SQL — no ORM
   models, no autogenerate. Run on every deploy via
   `docker compose run --rm --no-deps api alembic upgrade head`.

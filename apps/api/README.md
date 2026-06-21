@@ -70,17 +70,26 @@ pytest -q                                 # /health/db is skipped if DATABASE_UR
 
 ## Production deploy
 
-GitHub Actions builds the image, pushes it to ECR, and runs the deploy on
-the EC2 via SSM:
+GitHub Actions builds the image, pushes it to ECR, and runs the deploy
+on the EC2 via SSM Run-Command. Secrets live in **GitHub Encrypted
+Secrets** and are passed to the EC2 inline in the Run-Command call;
+AWS auth uses **OIDC** (no static AWS keys in GH Secrets).
 
-1. `docker compose -f docker-compose.prod.yml pull` (refresh `:latest`)
+The deploy steps on the EC2:
+
+1. `docker compose -f docker-compose.prod.yml pull`            # refresh image
 2. `docker compose -f docker-compose.prod.yml run --rm --no-deps api alembic upgrade head`
-3. `docker compose -f docker-compose.prod.yml up -d` (recreates api; db stays running)
+3. `docker compose -f docker-compose.prod.yml run --rm --no-deps api python -m scripts.seed`  # idempotent
+4. `docker compose -f docker-compose.prod.yml up -d`           # recreate api
 
-`DATABASE_URL`, `JWT_SECRET`, `ANTHROPIC_API_KEY`, and the Postgres creds
-are fetched from SSM Parameter Store on the EC2 itself — they never
-appear in CI logs or GitHub secrets. See `.github/workflows/` once the
-deploy is wired up.
+`DATABASE_URL`, `JWT_SECRET`, `ANTHROPIC_API_KEY`, `HR_USER_PASSWORD`,
+and the Postgres creds never appear in the source, in the image, in CI
+logs (GH masks them), or in the host filesystem. They live encrypted in
+GH Secrets, decrypted briefly inside the GH Actions runner, transit
+encrypted to the EC2 via SSM Run-Command, and only ever exist as
+process env on the running container. See `.github/workflows/` once
+the deploy is wired up. The trade-off vs. SSM Parameter Store is in
+`docs/TRADEOFFS.md`.
 
 ## Layout
 

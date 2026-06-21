@@ -31,6 +31,48 @@ is ~$15/mo, EC2 t3.small is ~$15/mo total.
 **Cost:** No managed backups, no automatic failover. For a production
 multi-user system I'd move to RDS or Aurora Serverless.
 
+## GitHub Secrets + OIDC + SSM Run-Command (not SSM Parameter Store)
+
+**Decision:** Production secrets (`DATABASE_URL`, `ANTHROPIC_API_KEY`,
+`JWT_SECRET`, `HR_USER_PASSWORD`, the Postgres creds) live in GitHub
+Encrypted Secrets. The deploy workflow authenticates to AWS via OIDC,
+builds + pushes the image to ECR, and runs the deploy on the EC2 via
+SSM Run-Command — passing the secrets through as command parameters
+that the EC2 turns into env vars for `docker compose up`.
+
+**Why:** For the take-home scope this matches the actual security
+requirements with markedly less setup than SSM Parameter Store. The
+real differences:
+
+|                                   | GH Secrets + OIDC | SSM Parameter Store |
+| --------------------------------- | ----------------- | ------------------- |
+| Setup time                        | 5 min             | 20–30 min           |
+| Cost                              | $0                | $0 (Standard tier)  |
+| Rotation without redeploy         | re-paste in UI    | `put-parameter`     |
+| Audit log (per-fetch)             | GH Actions logs   | CloudTrail          |
+| Secrets exposed to forks?         | No (GH disables)  | N/A                 |
+| Secret transits GH runner memory? | Yes               | No                  |
+| Public repo safe?                 | Yes               | Yes                 |
+
+The "secret transits GH runner memory" property is the only meaningful
+downside. For this app (small blast radius, single user, $5 of
+Anthropic credit), it doesn't outweigh the simpler setup.
+
+**Safety practices applied regardless:**
+- GH Actions pinned to commit SHAs (not floating tags) to defend
+  against compromised third-party actions.
+- AWS access via OIDC (`role-to-assume`); no static AWS keys in GH
+  Secrets.
+- `pull_request_target` is not used for any workflow that touches
+  secrets — only `push` to `main` and `workflow_dispatch`.
+- Deploy scripts never `echo` or transform secret values.
+- The seed script reads `HR_USER_PASSWORD` once, bcrypts it, then
+  the plaintext is gone — the DB only ever holds the hash.
+
+**What I'd switch to for a real product:** SSM Parameter Store, mainly
+for the rotation-without-redeploy and CloudTrail-per-fetch properties.
+Listed in the "what I'd add next" section.
+
 ## Single HR user, no role hierarchy
 
 **Decision:** One seeded user, JWT cookie session, no signup / reset.
@@ -142,6 +184,9 @@ past), gives a free audit trail, and simplifies the "current salary" view.
 - Approval workflow for raises above a configurable threshold
 - Live FX with a daily refresh job
 - Move Postgres to RDS, add point-in-time recovery
+- Move secrets from GitHub Secrets to AWS SSM Parameter Store (rotation
+  without redeploy, CloudTrail per-fetch audit log, no transit through
+  GitHub Actions runner memory)
 - Slack notification on every salary change for the manager's manager
 - Two-factor auth, SSO
 - Per-employee notes / comments
