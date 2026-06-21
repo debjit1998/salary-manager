@@ -8,10 +8,14 @@ import type {
   HeadcountChangeResult,
   RaisesInPeriodResult,
   SalaryDistributionResult,
+  SummaryResult,
   TopEarnersResult,
 } from "@/types/api";
 
 export const analyticsApi = {
+  summary: () =>
+    api.get<SummaryResult>("/analytics/summary").then((r) => r.data),
+
   headcountBy: (dimension: Dimension, filters: EmployeeFilters = {}) =>
     api
       .get<HeadcountByResult>("/analytics/headcount-by", {

@@ -220,6 +220,13 @@ def add_salary_change(
         note=body.note,
         created_by=user.id,
     )
+    # If the salary change includes a new level (FE sends this when
+    # reason='promo'), bump the employee's level in the same
+    # transaction so the row and the org state stay consistent.
+    if body.new_level_id is not None:
+        q.update_employee(
+            session, employee_id, {"level_id": body.new_level_id}
+        )
     session.commit()
     return SalaryChangeOut(**row)
 

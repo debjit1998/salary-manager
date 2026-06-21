@@ -93,34 +93,15 @@ def test_nl_503_when_key_missing(
     assert r.status_code == 503
 
 
-# --- tool-use happy path ------------------------------------------------
+# --- tool routing -------------------------------------------------------
 
 
-def test_tool_use_headcount_by_country(
+def test_unknown_tool_returns_error(
     auth_client: TestClient, seeded_data: dict, fake_anthropic
 ) -> None:
-    fake_anthropic(
-        _response([_tool_use_block("headcount_by", {"dimension": "country"})])
-    )
-    r = auth_client.post(
-        "/nl-query", json={"question": "How many employees by country?"}
-    )
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["kind"] == "tool"
-    assert body["tool"] == "headcount_by"
-    assert body["args"] == {"dimension": "country"}
-    # Result has at least the seeded countries
-    dims = {row["dimension"] for row in body["result"]["rows"]}
-    assert {"US", "UK", "IN"}.issubset(dims)
-    # meta has token counts
-    assert body["meta"]["input_tokens"] == 100
-    assert body["meta"]["output_tokens"] == 50
-
-
-def test_tool_use_unknown_tool_returns_error(
-    auth_client: TestClient, seeded_data: dict, fake_anthropic
-) -> None:
+    """Defensive: if the model somehow picks a tool that isn't in our
+    catalogue (e.g. a stale name from cache), we return a structured
+    error instead of 500."""
     fake_anthropic(_response([_tool_use_block("ghost_tool", {})]))
     r = auth_client.post("/nl-query", json={"question": "..."})
     assert r.status_code == 200
@@ -197,26 +178,32 @@ def test_query_is_logged(
 ) -> None:
     fake_anthropic(
         _response(
-            [_tool_use_block("headcount_by", {"dimension": "department"})]
+            [
+                _tool_use_block(
+                    "execute_sql",
+                    {"sql": "SELECT count(*) AS n FROM employees"},
+                )
+            ]
         )
     )
     auth_client.post(
         "/nl-query",
-        json={"question": "headcount by department please"},
+        json={"question": "count employees please"},
     )
     row = (
         db_session.execute(
             text(
-                "SELECT question, tool_picked, result_rows "
+                "SELECT question, tool_picked, sql_emitted, result_rows "
                 "FROM nl_query_log "
                 "WHERE question = :q "
                 "ORDER BY created_at DESC LIMIT 1"
             ),
-            {"q": "headcount by department please"},
+            {"q": "count employees please"},
         )
         .mappings()
         .one_or_none()
     )
     assert row is not None
-    assert row["tool_picked"] == "headcount_by"
+    assert row["tool_picked"] == "execute_sql"
+    assert row["sql_emitted"] and "SELECT" in row["sql_emitted"].upper()
     assert row["result_rows"] is not None and row["result_rows"] >= 1

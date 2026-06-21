@@ -128,6 +128,12 @@ class SalaryChangeCreate(BaseModel):
     currency_code: Currency
     reason: SalaryReason
     note: str | None = None
+    # Optional. When set, the employee's `level_id` is updated to this
+    # value in the same transaction. The FE makes this required for
+    # `reason='promo'`; the backend treats it as opt-in for any reason
+    # so demotions or off-cycle re-levelings via 'adjustment' are also
+    # possible.
+    new_level_id: int | None = None
 
 
 class EquityGrantCreate(BaseModel):

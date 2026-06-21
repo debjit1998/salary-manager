@@ -13,11 +13,15 @@ _Filled in once the NL endpoint is implemented. Will be reproduced
 verbatim here, including the cached schema description that Claude sees
 on every request._
 
-### Analytics tool schemas
+### Tool schema
 
-_Filled in once the tool layer is implemented. Each of the 7 tools is
-defined with a JSON Schema for the LLM and a Python function on the
-backend. Both are reproduced here side by side so the mapping is clear._
+The NL endpoint exposes exactly one tool — `execute_sql` — defined in
+`apps/api/app/src/nl/tools.py`. Claude generates a single SELECT; the
+backend validates it via `sql_guard.validate_select` and runs it
+against the read-only `nl_readonly` Postgres role with a 10-second
+`statement_timeout`. See `docs/TRADEOFFS.md` ("SQL-only NL query")
+for the reasoning behind this design vs. the structured-tool hybrid
+we originally shipped.
 
 ## (b) Prompts I gave Claude Code while building
 
@@ -34,9 +38,12 @@ decisions reached, and why:
 - **Effective-dated salary history + bands** over current-salary-only,
   because it lets the NL query feature answer temporal and comp-ratio
   questions — which are the questions HR actually asks.
-- **Hybrid tool-use + SQL fallback** for NL, rather than tools-only or
-  raw-SQL-only, to keep the common path safe and deterministic while
-  not dead-ending on the long tail.
+- **SQL-only NL** (after a brief detour through a structured-tool
+  hybrid). The hybrid kept routing to "close-enough" tools when
+  questions needed custom filters; routing everything through SQL
+  with strong guard rails (sqlglot validation, read-only role,
+  timeout, forced LIMIT) traded that error class for a uniform path.
+  See `docs/TRADEOFFS.md` for the full reasoning.
 - **Native-currency storage with a fixed FX ratio table**, rather than
   USD-only or a live FX feed — see `TRADEOFFS.md`.
 

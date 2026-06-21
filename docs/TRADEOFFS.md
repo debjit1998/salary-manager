@@ -109,25 +109,72 @@ table's description and retrieving the top-K relevant tables per
 question. At 9 tables the whole schema fits comfortably in the prompt;
 this matters past ~30 tables. Listed as a follow-up.
 
-## Hybrid NL query (tools first, SQL fallback)
+## SQL-only NL query (no structured tool catalogue)
 
-**Decision:** Claude picks from 7 parameterised analytics tools; if it
-can't, it falls back to generating a `SELECT` against a read-only
-Postgres role behind a sqlglot guard.
+**Decision:** The NL endpoint exposes exactly one tool to Claude —
+`execute_sql`. Every question is answered by writing a single SELECT;
+there is no structured-tool catalogue mapping questions to
+pre-canned aggregates.
 
-**Why:**
+**Why this isn't the obvious choice — and why we ended up here:**
 
-- The tool layer covers the common HR questions deterministically and
-  is trivially unit-testable.
-- A pure tool-only design dead-ends on the long tail; a pure
-  raw-SQL-from-LLM design is harder to test and reason about, and slower
-  to iterate on.
-- The hybrid keeps the common path fast and safe and gives the long
-  tail a controlled escape hatch.
+The textbook answer for text-to-SQL is a hybrid: a handful of
+parameterised analytics tools that cover common patterns
+deterministically, plus a guarded SQL fallback for the long tail. We
+started there, with 7 tools (`headcount_by`, `avg_salary_by`,
+`top_n_earners`, `comp_ratio_vs_band`, `salary_distribution`,
+`raises_in_period`, `headcount_change`). The issue we hit in practice:
+the LLM occasionally picked a "close-enough" structured tool when the
+real question needed a filter the tool didn't expose. Example: "how
+many people make over $20,000 in India?" got routed to
+`salary_distribution(country=IN)` — which has fixed buckets at
+50k/100k/150k/… — instead of the correct
+`WHERE amount_usd > 20000`. The result was related data but not the
+asked answer, which is the worst kind of error because it looks right.
 
-**Cost:** More code paths to maintain and test. Mitigated by keeping
-the fallback narrow (single SELECT, read-only role, 10 s timeout, forced
-LIMIT) and logging every NL query for review.
+Routing every question through SQL trades model-picks-wrong-tool for
+model-generates-wrong-SQL. But that single class of failure can be
+addressed uniformly:
+
+- **sqlglot AST validation** rejects anything that isn't a single
+  SELECT, anything containing DML/DDL, and a small set of dangerous
+  functions (`pg_sleep`, `pg_read_file`, …). Forces `LIMIT 1000`.
+- **`nl_readonly` Postgres role** — SELECT-only grants. Defence in
+  depth even if the guard ever misses a case.
+- **`statement_timeout = 10s`** stops pathological queries.
+- Every emitted SQL is logged to `nl_query_log` with the question,
+  latency, and token usage.
+
+**Cost:** Loses two real things from the hybrid design.
+
+1. **Determinism on common questions.** The same well-known question
+   ("how many employees per country?") can now produce slightly
+   different SQL on different days; we can't unit-test that the SQL
+   for that question always returns the right shape.
+2. **Hand-tuned query plans.** The structured tools used explicit
+   indexes and JOINs designed for the data; LLM-generated SQL might
+   pick suboptimal join orders. At 10k rows nothing's noticeable;
+   beyond that it would matter.
+
+**What we'd do at scale:** Re-introduce the hybrid. The honest sequence:
+ship SQL-only first, watch what users actually ask via `nl_query_log`,
+cluster the common patterns, promote the top ~10 patterns to
+parameterised structured tools, keep `execute_sql` as the long-tail
+escape hatch. That gives you the best of both — but you only know
+which structured tools to build *after* you have usage data, not
+before.
+
+**What we're explicitly accepting:**
+- LLM picks a wrong join occasionally → user sees "0 rows" or wrong
+  numbers. Mitigated by showing the SQL in the UI (`<details>` block)
+  so the user can sanity-check what was run.
+- Slower than hand-tuned queries on hot paths.
+- Each question is a fresh roll — same question twice may produce
+  syntactically different SQL.
+
+The structured analytics functions in `app.src.analytics.queries`
+still exist and still power the `/analytics/*` REST endpoints behind
+the dashboard panels. They're just not exposed to the LLM.
 
 ## Native-currency-only storage; USD computed at query time
 

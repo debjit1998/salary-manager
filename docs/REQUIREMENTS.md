@@ -45,10 +45,12 @@ self-explanatory.
    average / median salary by dimension, salary distribution,
    below-band count, raises in the last 12 months, headcount change YoY.
 10. **Natural-language query** — chat-style input that translates the
-    HR manager's question into a query and renders the result as a table
-    or chart. Implemented as Anthropic Claude tool-use over a typed set
-    of analytics functions, with a guarded read-only SQL fallback for
-    questions that don't map to a tool.
+    HR manager's question into a single read-only SELECT against the
+    HR schema, with the result rendered as a table. Implemented as
+    Anthropic Claude tool-use with a single `execute_sql` tool guarded
+    by sqlglot validation, a read-only Postgres role, and a 10-second
+    `statement_timeout`. The rationale for SQL-only vs. a hybrid
+    structured-tool design is in `docs/TRADEOFFS.md`.
 
 ## Out of scope (and why)
 

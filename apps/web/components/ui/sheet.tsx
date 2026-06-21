@@ -56,7 +56,16 @@ const SheetContent = React.forwardRef<
     <SheetOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className={cn(sheetVariants({ side }), className)}
+      // focus-visible:outline-none — Radix Dialog auto-focuses the
+      // content on open; the browser's default focus outline (which
+      // picks up our --ring colour) was showing as an indigo edge on
+      // the left side. The dismiss-on-Esc / focus trap behaviour is
+      // unaffected.
+      className={cn(
+        sheetVariants({ side }),
+        "focus:outline-none focus-visible:outline-none",
+        className,
+      )}
       {...props}
     >
       {children}

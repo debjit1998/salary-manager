@@ -65,9 +65,12 @@ def test_jwt_expired_raises_expired_signature() -> None:
 
 
 def test_jwt_tampered_signature_rejected() -> None:
+    """Either InvalidSignatureError (most chars flip the sig cleanly)
+    or DecodeError (occasionally a flip produces invalid base64). Both
+    mean the token is rejected — which is what we care about."""
     token = create_jwt("user-123")
     tampered = token[:-1] + ("a" if token[-1] != "a" else "b")
-    with pytest.raises(jwt.InvalidSignatureError):
+    with pytest.raises(jwt.PyJWTError):
         decode_jwt(tampered)
 
 

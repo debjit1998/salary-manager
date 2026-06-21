@@ -166,21 +166,21 @@
     ├─────────────────▶│                    │                      │
     │                  │  messages.create   │                      │
     │                  │  + cached system   │                      │
-    │                  │  + 7 tools         │                      │
+    │                  │  + execute_sql tool│                      │
     │                  ├───────────────────▶│                      │
-    │                  │   tool_use OR text │                      │
+    │                  │  tool_use(sql=…)   │                      │
+    │                  │     OR text        │                      │
     │                  │◀───────────────────┤                      │
     │                  │                    │                      │
-    │                  │  if tool_use:      │                      │
-    │                  │    parameterised   │                      │
-    │                  │    SQL via Core    ├─────────────────────▶│
+    │                  │  sqlglot guard     │                      │
+    │                  │   (single SELECT,  │                      │
+    │                  │    no DML/DDL,     │                      │
+    │                  │    LIMIT 1000)     │                      │
     │                  │                    │                      │
-    │                  │  else (no tool):   │                      │
-    │                  │    sqlglot guard   │                      │
-    │                  │    + read-only DB  │                      │
-    │                  │    role + 10s      │                      │
+    │                  │  SET LOCAL ROLE    │                      │
+    │                  │    nl_readonly +   │                      │
     │                  │    statement_      │                      │
-    │                  │    timeout         ├─────────────────────▶│
+    │                  │    timeout=10s     ├─────────────────────▶│
     │                  │                    │                      │
     │                  │  log to            │                      │
     │                  │  nl_query_log      ├─────────────────────▶│
@@ -189,16 +189,34 @@
     │◀─────────────────┤                    │                      │
 ```
 
-### Why hybrid (tool-use first, SQL fallback)
+### Why SQL-only (no structured tools)
 
-- **Tool-use covers 80%+ of HR questions** with deterministic,
-  unit-tested SQL. Zero injection surface — the LLM picks a tool and
-  fills typed args; the SQL is hand-written.
-- **The SQL fallback prevents "I don't know" dead-ends** on the long tail.
-  Guarded by sqlglot (single `SELECT`, no DML, no DDL), a read-only DB
-  role (no write grants regardless of what SQL is generated), and a
-  10-second `statement_timeout`.
-- **The trade-off** is documented in `TRADEOFFS.md`.
+We tried a hybrid design first — 7 structured analytics tools (one per
+aggregate) plus this SQL escape hatch — and found that the LLM
+occasionally picked a "close-enough" tool when the question actually
+needed a custom filter the tool didn't expose. Example: "how many
+people make over $20,000 in India?" got routed to `salary_distribution`
+(which has fixed buckets at 50k/100k/150k/…) when the right answer
+needs `WHERE amount_usd > 20000`. The bucket data was *related* but
+not the asked answer.
+
+Routing every question through `execute_sql` trades that source of
+error for a different one — LLM-generated SQL can itself be wrong —
+but every question is now answered with the same well-tested guard
+rails:
+
+- **sqlglot AST validation**: single SELECT, no DML/DDL, no dangerous
+  functions (`pg_sleep`, `pg_read_file`, etc.); forces `LIMIT 1000`.
+- **`nl_readonly` Postgres role**: SELECT-only grants, defence in
+  depth even if the guard ever missed something.
+- **`statement_timeout = 10s`** on the executing transaction.
+
+The structured analytics functions in `app.src.analytics.queries`
+still exist — they power the `/analytics/*` REST endpoints used by the
+dashboard panels. They're just not exposed to the LLM anymore.
+
+The trade-off (and what we'd do at scale) is documented in
+`TRADEOFFS.md`.
 
 ### How Claude knows the schema (auto-derived + hints)
 
@@ -268,5 +286,5 @@ traffic.
   `lower(name)` for the search box. Target p95 < 100 ms at 10k rows.
 - Analytics queries hit indexed columns and the `employees_current_
   salary` view. Target < 500 ms.
-- NL tool-use end-to-end target: < 2.5 s p95 (Anthropic call dominates;
+- NL query end-to-end target: < 4 s p95 (Anthropic call dominates;
   prompt caching keeps token cost low).

@@ -189,8 +189,8 @@ apps/api/
         queries.py          # SQL + parse_sort + build_filters (multi-select aware)
         schemas.py          # Pydantic in/out models for the employee surface
       analytics/
-        router.py           # /analytics/{headcount-by, avg-salary-by, …} (7 tools)
-        queries.py          # 7 typed analytics functions (reused by the NL endpoint)
+        router.py           # /analytics/{summary, headcount-by, avg-salary-by, …}
+        queries.py          # Typed analytics functions — power the dashboard panels
         schemas.py
       lookup/
         router.py           # GET /lookups → {departments, levels, currencies}

@@ -141,6 +141,9 @@ export interface SalaryChangeCreate {
   currency_code: Currency;
   reason: SalaryReason;
   note?: string | null;
+  /** When set, the employee's level_id is updated in the same
+   *  transaction. The form makes this required when reason='promo'. */
+  new_level_id?: number | null;
 }
 
 export interface EquityGrantCreate {
@@ -197,10 +200,15 @@ export interface TopEarner {
   amount_usd: string;
   amount_native: string;
   currency_code: string;
+  /** Present when the NL endpoint converts to a target currency via
+   *  the tool's `target_currency` arg. Same value across all rows. */
+  amount_target?: string;
 }
 
 export interface TopEarnersResult {
   rows: TopEarner[];
+  /** Echoed back by the NL endpoint when target_currency was set. */
+  target_currency?: Currency;
 }
 
 export interface BandSummary {
@@ -266,3 +274,71 @@ export interface HeadcountChangeResult {
   start: string;
   end: string;
 }
+
+export interface SummaryResult {
+  active_headcount: number;
+  avg_salary_usd: string;
+  below_band_count: number;
+  hires_last_90_days: number;
+}
+
+// --- NL query ------------------------------------------------------------
+
+export interface NLMeta {
+  latency_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  model: string;
+}
+
+export type NLToolName =
+  | "headcount_by"
+  | "avg_salary_by"
+  | "salary_distribution"
+  | "top_n_earners"
+  | "comp_ratio_vs_band"
+  | "raises_in_period"
+  | "headcount_change";
+
+export interface NLToolResponse {
+  kind: "tool";
+  tool: NLToolName;
+  args: Record<string, unknown>;
+  result:
+    | HeadcountByResult
+    | AvgSalaryByResult
+    | SalaryDistributionResult
+    | TopEarnersResult
+    | CompRatioVsBandResult
+    | RaisesInPeriodResult
+    | HeadcountChangeResult;
+  meta: NLMeta;
+}
+
+export interface NLSqlResponse {
+  kind: "sql";
+  sql: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  meta: NLMeta;
+}
+
+export interface NLTextResponse {
+  kind: "text";
+  text: string;
+  meta: NLMeta;
+}
+
+export interface NLErrorResponse {
+  kind: "error";
+  error: string;
+  meta: NLMeta;
+}
+
+export type NLResponse =
+  | NLToolResponse
+  | NLSqlResponse
+  | NLTextResponse
+  | NLErrorResponse;
