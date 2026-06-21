@@ -47,3 +47,52 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* --- AgGrid: quartz theme overrides --------------------------------- */
+/* The community CSS is imported in the EmployeeGrid component itself
+ * (route-scoped, lazy-loaded). These overrides tune the look to match
+ * the rest of the app: slate hover, lighter row dividers, no outer
+ * border, vertically centered cells. */
+.ag-theme-quartz {
+  --ag-row-hover-color: rgb(248 250 252); /* slate-50 */
+  --ag-selected-row-background-color: rgb(238 242 255); /* indigo-50 */
+  --ag-border-color: rgb(226 232 240); /* slate-200 */
+  --ag-header-background-color: white;
+  --ag-header-foreground-color: rgb(71 85 105); /* slate-600 */
+  --ag-odd-row-background-color: transparent;
+  --ag-font-family:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --ag-font-size: 13px;
+  --ag-cell-horizontal-padding: 12px;
+  --ag-grid-size: 6px;
+  --ag-list-item-height: 32px;
+  --ag-icon-size: 16px;
+  /* Hide the outer grid border — the page provides its own spacing. */
+  --ag-wrapper-border-radius: 0;
+}
+.ag-theme-quartz .ag-root-wrapper {
+  border: none;
+}
+
+/* Vertically center every cell's content. AgGrid quartz uses a block
+ * cell by default; cellClass="flex items-center" loses the specificity
+ * fight against the theme. A scoped two-class rule wins. */
+.ag-theme-quartz .ag-cell {
+  display: flex;
+  align-items: center;
+}
+
+/* Lighter row separators */
+.ag-theme-quartz .ag-row {
+  border-bottom-color: rgb(241 245 249); /* slate-100 */
+  cursor: pointer;
+}
+.ag-theme-quartz .ag-header,
+.ag-theme-quartz .ag-header-row {
+  border-bottom-color: rgb(226 232 240); /* slate-200 */
+  text-transform: none;
+}
+.ag-theme-quartz .ag-header-cell {
+  padding-left: 12px;
+  padding-right: 12px;
+}

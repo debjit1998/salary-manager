@@ -9,6 +9,31 @@ export type SalaryReason = "hire" | "raise" | "promo" | "adjustment";
 export type BandPosition = "below" | "within" | "above";
 export type Dimension = "department" | "level" | "country" | "employment_type";
 
+// --- Lookups -------------------------------------------------------------
+
+export interface Department {
+  id: number;
+  name: string;
+}
+
+export interface Level {
+  id: number;
+  code: string;
+  rank: number;
+}
+
+export interface CurrencyRow {
+  code: string;
+  name: string;
+  ratio_to_usd: string;
+}
+
+export interface LookupsResponse {
+  departments: Department[];
+  levels: Level[];
+  currencies: CurrencyRow[];
+}
+
 // --- Auth ----------------------------------------------------------------
 
 export interface User {

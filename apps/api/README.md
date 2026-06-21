@@ -17,9 +17,10 @@ curl localhost:8000/health        # {"status":"ok"}
 curl localhost:8000/health/db     # {"db":"up","result":{"ok":1}}
 ```
 
-Open a `psql` shell against the local DB (host port is 5432 by default
-to avoid colliding with a system Postgres on 5432; user / password / db
-all default to `salary`):
+Open a `psql` shell against the local DB (host port defaults to 5432;
+override with `POSTGRES_HOST_PORT=5433` in `apps/api/.env` if you have
+another Postgres running locally; user / password / db all default to
+`salary`):
 
 ```bash
 psql -h localhost -p 5432 -U salary -d salary_manager
@@ -74,11 +75,15 @@ docker compose -f docker-compose.dev.yml exec api alembic downgrade -1
 tests/
 ├── conftest.py                ← top-level: just sets harmless env defaults
 ├── unit/                      ← pure-python, no DB, no FastAPI
-│   └── test_auth_primitives.py
+│   ├── test_auth_primitives.py
+│   ├── test_employee_helpers.py
+│   └── test_analytics_helpers.py
 └── integration/               ← real Postgres (in the dev compose stack)
     ├── conftest.py            ← per-session: creates salary_manager_test DB,
     │                            drops + re-migrates schema, per-test SAVEPOINT
-    └── test_auth_endpoints.py
+    ├── test_auth_endpoints.py
+    ├── test_employees_endpoints.py
+    └── test_analytics_endpoints.py
 ```
 
 ### Run inside the dev container (recommended — no host setup needed)
@@ -113,7 +118,8 @@ pytest tests/integration                             # needs `docker compose up 
 ```
 
 The host-side conftest defaults `TEST_DATABASE_URL` to
-`localhost:5432`. If your `POSTGRES_HOST_PORT` is different:
+`localhost:5432/salary_manager_test`. If you've set `POSTGRES_HOST_PORT`
+to a non-default port:
 
 ```bash
 TEST_DATABASE_URL=postgresql+psycopg://salary:salary@localhost:5433/salary_manager_test \
@@ -178,14 +184,55 @@ apps/api/
         auth.py             # bcrypt + JWT helpers, get_current_user dependency
       user/
         router.py           # POST /auth/login, /auth/logout, GET /auth/me
-      analytics/            # added in a later task
+      employee/
+        router.py           # GET/PATCH /employees, +/salary-changes, +/equity-grants
+        queries.py          # SQL + parse_sort + build_filters (multi-select aware)
+        schemas.py          # Pydantic in/out models for the employee surface
+      analytics/
+        router.py           # /analytics/{headcount-by, avg-salary-by, …} (7 tools)
+        queries.py          # 7 typed analytics functions (reused by the NL endpoint)
+        schemas.py
+      lookup/
+        router.py           # GET /lookups → {departments, levels, currencies}
   scripts/
     seed.py                 # idempotent seed: 1 HR user + 10k employees + history
   tests/
     conftest.py             # top-level: harmless env defaults for collection
     unit/
       test_auth_primitives.py
+      test_employee_helpers.py
+      test_analytics_helpers.py
     integration/
       conftest.py           # creates salary_manager_test, migrates, SAVEPOINT
       test_auth_endpoints.py
+      test_employees_endpoints.py
+      test_analytics_endpoints.py
 ```
+
+## API surface (auth required on everything except `/health*`)
+
+```
+POST   /auth/login                            sets the session cookie
+POST   /auth/logout                           clears the session cookie
+GET    /auth/me                               current HR user
+
+GET    /employees?…                           paginated + sorted + filtered + searched
+GET    /employees/{id}                        profile + history + grants + manager
+PATCH  /employees/{id}                        update profile (dept/level/manager/type/status)
+POST   /employees/{id}/salary-changes         append-only salary history
+POST   /employees/{id}/equity-grants          append-only grants
+
+GET    /lookups                               departments + levels + currencies
+
+GET    /analytics/headcount-by?dimension=…
+GET    /analytics/avg-salary-by?dimension=…   includes median (percentile_cont)
+GET    /analytics/salary-distribution         fixed USD buckets
+GET    /analytics/comp-ratio-vs-band          summary + out-of-band list
+POST   /analytics/top-earners                 body: { n, filters }
+POST   /analytics/raises-in-period            body: { start, end, filters }
+POST   /analytics/headcount-change            body: { start, end, dimension }
+```
+
+**Multi-select filters** — every list/analytics filter param accepts
+repeated keys: `?country=US&country=UK&band_position=below`. FastAPI
+parses this into `list[str] | None`; SQL uses `column = ANY(:values)`.

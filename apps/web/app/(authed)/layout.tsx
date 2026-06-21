@@ -28,8 +28,12 @@ export default function AuthedLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar />
+      {/* `overflow-auto` lets short pages scroll the main column; pages that
+       *  want internal scroll (e.g. /employees) wrap their content in
+       *  `flex h-full flex-col` and put `overflow-hidden` on the inner
+       *  container so AgGrid manages its own scrollbar. */}
       <main className="flex-1 overflow-auto">{children}</main>
     </div>
   );

@@ -119,11 +119,15 @@ def list_employees(
     size: int = Query(25, ge=1, le=100),
     sort: str | None = Query(None, description="e.g. 'hire_date' or '-current_salary_usd'"),
     q_: str | None = Query(None, alias="q", description="search name or email"),
-    dept_id: int | None = Query(None),
-    country: str | None = Query(None, pattern="^(US|UK|IN)$"),
-    level_id: int | None = Query(None),
-    employment_type: str | None = Query(None, pattern="^(full_time|part_time|contractor)$"),
-    status_: str | None = Query(None, alias="status", pattern="^(active|terminated)$"),
+    # Multi-select: repeat the query param (`?country=US&country=UK`).
+    # axios on the FE is configured with `paramsSerializer.indexes:null`
+    # so it produces that exact format from an array.
+    dept_id: list[int] | None = Query(None),
+    country: list[str] | None = Query(None),
+    level_id: list[int] | None = Query(None),
+    employment_type: list[str] | None = Query(None),
+    status_: list[str] | None = Query(None, alias="status"),
+    band_position: list[str] | None = Query(None),
     session: Session = Depends(get_session),
     _user: CurrentUser = Depends(get_current_user),
 ) -> EmployeeListResponse:
@@ -139,6 +143,7 @@ def list_employees(
             level_id=level_id,
             employment_type=employment_type,
             status=status_,
+            band_position=band_position,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -48,16 +48,22 @@ def parse_sort(sort: str | None) -> tuple[str, str]:
 def build_filters(
     *,
     q: str | None = None,
-    dept_id: int | None = None,
-    country: str | None = None,
-    level_id: int | None = None,
-    employment_type: str | None = None,
-    status: str | None = None,
+    dept_id: list[int] | None = None,
+    country: list[str] | None = None,
+    level_id: list[int] | None = None,
+    employment_type: list[str] | None = None,
+    status: list[str] | None = None,
+    band_position: list[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Build a parameterised WHERE clause + bind params.
 
-    Returns ('' , {}) if no filters were given. Caller prepends 'AND'
-    or 'WHERE' as appropriate.
+    Each filter accepts a LIST of values (multi-select). When the list
+    is empty or None the filter is dropped entirely. `band_position`
+    requires the caller to have joined `employees_current_salary` (as
+    `ecs`) and `comp_bands` (as `cb`) — see `_LIST_FROM` below.
+
+    Postgres `= ANY(:values)` does the heavy lifting; psycopg adapts
+    Python lists to Postgres ARRAY[...] automatically.
     """
     conds: list[str] = []
     params: dict[str, Any] = {}
@@ -68,21 +74,31 @@ def build_filters(
             "OR lower(e.email) LIKE :q)"
         )
         params["q"] = f"%{q.lower()}%"
-    if dept_id is not None:
-        conds.append("e.department_id = :dept_id")
+    if dept_id:
+        conds.append("e.department_id = ANY(:dept_id)")
         params["dept_id"] = dept_id
-    if country is not None:
-        conds.append("e.country = :country")
+    if country:
+        conds.append("e.country = ANY(:country)")
         params["country"] = country
-    if level_id is not None:
-        conds.append("e.level_id = :level_id")
+    if level_id:
+        conds.append("e.level_id = ANY(:level_id)")
         params["level_id"] = level_id
-    if employment_type is not None:
-        conds.append("e.employment_type = :employment_type")
+    if employment_type:
+        conds.append("e.employment_type = ANY(:employment_type)")
         params["employment_type"] = employment_type
-    if status is not None:
-        conds.append("e.status = :status")
+    if status:
+        conds.append("e.status = ANY(:status)")
         params["status"] = status
+    if band_position:
+        conds.append(
+            "(CASE "
+            "  WHEN ecs.amount IS NULL OR cb.band_min IS NULL THEN NULL "
+            "  WHEN ecs.amount < cb.band_min THEN 'below' "
+            "  WHEN ecs.amount > cb.band_max THEN 'above' "
+            "  ELSE 'within' "
+            "END) = ANY(:band_position)"
+        )
+        params["band_position"] = band_position
 
     return " AND ".join(conds), params
 
@@ -90,7 +106,19 @@ def build_filters(
 # --- Query executors -----------------------------------------------------
 
 
-_LIST_SELECT = """
+# Shared FROM + JOINS used by both the list query and the count query.
+# Joining comp_bands always (not just when filtering by band_position)
+# costs nothing measurable at 10k rows and keeps the count query honest
+# when band_position is filtered.
+_LIST_FROM = """
+FROM employees e
+JOIN departments d ON d.id = e.department_id
+JOIN levels      l ON l.id = e.level_id
+LEFT JOIN employees_current_salary ecs ON ecs.employee_id = e.id
+LEFT JOIN comp_bands cb ON cb.level_id = e.level_id AND cb.country = e.country
+"""
+
+_LIST_COLUMNS = """
 SELECT
     e.id::text                AS id,
     e.employee_no,
@@ -114,11 +142,6 @@ SELECT
         WHEN ecs.amount > cb.band_max THEN 'above'
         ELSE 'within'
     END                       AS band_position
-FROM employees e
-JOIN departments d ON d.id = e.department_id
-JOIN levels      l ON l.id = e.level_id
-LEFT JOIN employees_current_salary ecs ON ecs.employee_id = e.id
-LEFT JOIN comp_bands cb ON cb.level_id = e.level_id AND cb.country = e.country
 """
 
 
@@ -129,11 +152,12 @@ def list_employees(
     size: int,
     sort: str | None,
     q: str | None = None,
-    dept_id: int | None = None,
-    country: str | None = None,
-    level_id: int | None = None,
-    employment_type: str | None = None,
-    status: str | None = None,
+    dept_id: list[int] | None = None,
+    country: list[str] | None = None,
+    level_id: list[int] | None = None,
+    employment_type: list[str] | None = None,
+    status: list[str] | None = None,
+    band_position: list[str] | None = None,
 ) -> tuple[list[dict], int]:
     """Return (rows, total). Caller maps rows to Pydantic models."""
     column, direction = parse_sort(sort)
@@ -144,17 +168,18 @@ def list_employees(
         level_id=level_id,
         employment_type=employment_type,
         status=status,
+        band_position=band_position,
     )
 
     where_clause = f"WHERE {where_body}" if where_body else ""
     # `column` and `direction` come from a whitelist; `q` and the rest are
     # bound params. No string-interp injection surface.
     list_sql = (
-        f"{_LIST_SELECT} {where_clause} "
+        f"{_LIST_COLUMNS} {_LIST_FROM} {where_clause} "
         f"ORDER BY {column} {direction}, e.id "
         f"LIMIT :limit OFFSET :offset"
     )
-    count_sql = f"SELECT count(*) FROM employees e {where_clause}"
+    count_sql = f"SELECT count(*) {_LIST_FROM} {where_clause}"
 
     params_list = {**params, "limit": size, "offset": (page - 1) * size}
 

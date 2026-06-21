@@ -14,11 +14,15 @@ export interface ListEmployeesParams {
   size?: number;
   sort?: string;
   q?: string;
-  dept_id?: number;
-  country?: string;
-  level_id?: number;
-  employment_type?: string;
-  status?: string;
+  // Filter fields accept arrays. axios is configured (see lib/api/client.ts)
+  // to serialise them as repeated query keys (?country=US&country=UK),
+  // which is what FastAPI expects for `list[str]` Query params.
+  dept_id?: number[];
+  country?: string[];
+  level_id?: number[];
+  employment_type?: string[];
+  status?: string[];
+  band_position?: string[];
 }
 
 export const employeesApi = {

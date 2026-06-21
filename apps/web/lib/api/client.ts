@@ -6,6 +6,10 @@ export const api = axios.create({
   baseURL,
   withCredentials: true, // send the session httpOnly cookie
   headers: { "Content-Type": "application/json" },
+  // Serialise array params as repeated keys (?k=a&k=b) — axios's default
+  // is bracket-indexed (?k[]=a&k[]=b) which FastAPI doesn't recognise
+  // for `list[str]` Query params.
+  paramsSerializer: { indexes: null },
 });
 
 /** On 401 to anything except /auth/login itself, redirect to /login.
