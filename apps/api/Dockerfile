@@ -29,6 +29,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY --chown=app:app alembic.ini ./
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app app ./app
+COPY --chown=app:app scripts ./scripts
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
