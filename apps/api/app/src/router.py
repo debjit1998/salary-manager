@@ -7,9 +7,11 @@ here, keeping main.py free of per-domain knowledge.
 
 from fastapi import APIRouter
 
+from app.src.analytics.router import router as analytics_router
 from app.src.employee.router import router as employee_router
 from app.src.user.router import router as user_router
 
 router = APIRouter()
 router.include_router(user_router)
 router.include_router(employee_router)
+router.include_router(analytics_router)
