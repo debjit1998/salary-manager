@@ -1,21 +1,15 @@
 """POST /nl-query — natural-language HR analytics endpoint.
 
-Pipeline:
-
-    question
-      → Anthropic (system + cached schema + tools)
-        → either a `tool_use` block...
-            → dispatch to the matching ToolSpec.dispatch
-        → ...or plain text (model couldn't / refused)
-      → log to nl_query_log
-      → response
+The actual LLM + tool loop lives in `llm_agent.run_agent`. This router
+is the HTTP/translation layer: validate the request, run the agent,
+log the outcome to nl_query_log, and shape the response into one of
+the NL*Response Pydantic schemas the frontend dispatches on.
 """
 
 from __future__ import annotations
 
 import logging
 import time
-from datetime import date
 from typing import Any
 
 from anthropic import APIError, BadRequestError
@@ -26,12 +20,10 @@ from app.db import engine, get_session
 from app.settings import settings
 from app.src.common.auth import CurrentUser, get_current_user
 
-from .client import (
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_MODEL,
-    build_system,
-    get_client,
-)
+from .client import get_client
+from .llm_agent import AgentResult, run_agent
+from .log import write_log
+from .schema_prompt import build_schema_prompt
 from .schemas import (
     NLErrorResponse,
     NLMeta,
@@ -40,10 +32,6 @@ from .schemas import (
     NLTextResponse,
     NLToolResponse,
 )
-from .log import write_log
-from .schema_prompt import build_schema_prompt
-from .sql_guard import SqlGuardError
-from .tools import TOOL_DEFINITIONS, TOOL_DISPATCH
 
 log = logging.getLogger(__name__)
 
@@ -66,22 +54,6 @@ def get_schema_block() -> str:
     return _schema_block
 
 
-# --- Anthropic content helpers -------------------------------------------
-
-
-def _find_tool_use(content: list[Any]) -> Any | None:
-    for block in content:
-        if getattr(block, "type", None) == "tool_use":
-            return block
-    return None
-
-
-def _join_text(content: list[Any]) -> str:
-    return "".join(
-        getattr(b, "text", "") for b in content if getattr(b, "type", None) == "text"
-    ).strip()
-
-
 # --- Endpoint -------------------------------------------------------------
 
 
@@ -101,150 +73,142 @@ def nl_query(
         )
 
     started = time.perf_counter()
-    today = date.today().isoformat()
-    user_message = f"Today is {today}.\n\nQuestion: {body.question}"
-
     try:
-        client = get_client()
-        response = client.messages.create(
-            model=DEFAULT_MODEL,
-            max_tokens=DEFAULT_MAX_TOKENS,
-            system=build_system(get_schema_block()),
-            tools=TOOL_DEFINITIONS,
-            messages=[{"role": "user", "content": user_message}],
+        result = run_agent(
+            client=get_client(),
+            session=session,
+            question=body.question,
+            schema_block=get_schema_block(),
         )
     except BadRequestError as exc:
-        latency_ms = int((time.perf_counter() - started) * 1000)
         _log_safe(
             session,
             user_id=user.id,
             question=body.question,
             error=f"anthropic 400: {exc}",
-            latency_ms=latency_ms,
+            latency_ms=int((time.perf_counter() - started) * 1000),
         )
         raise HTTPException(status_code=502, detail="upstream model error") from exc
     except APIError as exc:
-        latency_ms = int((time.perf_counter() - started) * 1000)
         _log_safe(
             session,
             user_id=user.id,
             question=body.question,
             error=f"anthropic error: {exc}",
-            latency_ms=latency_ms,
+            latency_ms=int((time.perf_counter() - started) * 1000),
         )
         raise HTTPException(status_code=502, detail="upstream model error") from exc
 
-    latency_ms = int((time.perf_counter() - started) * 1000)
-    usage = response.usage
     meta = NLMeta(
-        latency_ms=latency_ms,
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
-        cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-        cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        latency_ms=result.latency_ms,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        cache_read_tokens=result.cache_read_tokens,
+        cache_creation_tokens=result.cache_creation_tokens,
+        attempts=result.attempts,
     )
 
-    tool_block = _find_tool_use(response.content)
+    return _shape_response(session, user, body.question, result, meta)
 
-    if tool_block is None:
-        # The model returned plain text — log and return as-is.
-        text = _join_text(response.content) or "I couldn't answer that with the data I have."
+
+# --- Response shaping + logging ------------------------------------------
+
+
+def _shape_response(
+    session: Session,
+    user: CurrentUser,
+    question: str,
+    result: AgentResult,
+    meta: NLMeta,
+):
+    """Translate the AgentResult into the matching NL*Response and write
+    a single nl_query_log row reflecting the final outcome."""
+
+    if result.kind == "text":
         _log_safe(
             session,
             user_id=user.id,
-            question=body.question,
-            latency_ms=latency_ms,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
+            question=question,
+            latency_ms=meta.latency_ms,
+            input_tokens=meta.input_tokens,
+            output_tokens=meta.output_tokens,
         )
-        return NLTextResponse(kind="text", text=text, meta=meta)
+        return NLTextResponse(kind="text", text=result.text or "", meta=meta)
 
-    tool_name = tool_block.name
-    tool_args = dict(tool_block.input or {})
-
-    dispatch = TOOL_DISPATCH.get(tool_name)
-    if dispatch is None:
+    if result.kind == "unknown_tool":
         _log_safe(
             session,
             user_id=user.id,
-            question=body.question,
-            error=f"unknown tool: {tool_name}",
-            tool_picked=tool_name,
-            tool_args=tool_args,
-            latency_ms=latency_ms,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
+            question=question,
+            error=result.error,
+            tool_picked=result.tool_name,
+            tool_args=result.tool_args,
+            latency_ms=meta.latency_ms,
+            input_tokens=meta.input_tokens,
+            output_tokens=meta.output_tokens,
         )
-        return NLErrorResponse(kind="error", error=f"unknown tool: {tool_name}", meta=meta)
+        return NLErrorResponse(kind="error", error=result.error or "unknown tool", meta=meta)
 
-    try:
-        result = dispatch(session, tool_args)
-    except SqlGuardError as exc:
+    if result.kind in {"guard_error", "tool_error"}:
         _log_safe(
             session,
             user_id=user.id,
-            question=body.question,
-            tool_picked=tool_name,
-            tool_args=tool_args,
-            sql_emitted=str(tool_args.get("sql", "")),
-            error=f"sql_guard: {exc}",
-            latency_ms=latency_ms,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
+            question=question,
+            tool_picked=result.tool_name,
+            tool_args=result.tool_args,
+            sql_emitted=result.sql_emitted,
+            error=result.error,
+            latency_ms=meta.latency_ms,
+            input_tokens=meta.input_tokens,
+            output_tokens=meta.output_tokens,
         )
-        return NLErrorResponse(kind="error", error=f"unsafe SQL: {exc}", meta=meta)
-    except Exception as exc:  # noqa: BLE001
-        log.exception("tool dispatch failed: %s", tool_name)
-        _log_safe(
-            session,
-            user_id=user.id,
-            question=body.question,
-            tool_picked=tool_name,
-            tool_args=tool_args,
-            error=f"dispatch failure: {exc}",
-            latency_ms=latency_ms,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-        )
-        return NLErrorResponse(kind="error", error=f"tool failed: {exc}", meta=meta)
+        return NLErrorResponse(kind="error", error=result.error or "tool failed", meta=meta)
 
-    if tool_name == "execute_sql":
-        rows = result["rows"]
+    # Successful tool dispatch.
+    payload = result.tool_result or {}
+
+    if result.kind == "sql":
+        rows = payload.get("rows", [])
         _log_safe(
             session,
             user_id=user.id,
-            question=body.question,
-            tool_picked=tool_name,
-            tool_args=tool_args,
-            sql_emitted=result["sql"],
+            question=question,
+            tool_picked=result.tool_name,
+            tool_args=result.tool_args,
+            sql_emitted=payload.get("sql"),
             result_rows=len(rows),
-            latency_ms=latency_ms,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
+            latency_ms=meta.latency_ms,
+            input_tokens=meta.input_tokens,
+            output_tokens=meta.output_tokens,
         )
         return NLSqlResponse(
             kind="sql",
-            sql=result["sql"],
-            columns=result["columns"],
+            sql=payload.get("sql", ""),
+            columns=payload.get("columns", []),
             rows=rows,
             meta=meta,
         )
 
+    # kind == "tool" — generic structured-tool result. Today there's no
+    # such tool registered, but keep the branch for future tools.
     _log_safe(
         session,
         user_id=user.id,
-        question=body.question,
-        tool_picked=tool_name,
-        tool_args=tool_args,
-        result_rows=_count_rows(result),
-        latency_ms=latency_ms,
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
+        question=question,
+        tool_picked=result.tool_name,
+        tool_args=result.tool_args,
+        result_rows=_count_rows(payload),
+        latency_ms=meta.latency_ms,
+        input_tokens=meta.input_tokens,
+        output_tokens=meta.output_tokens,
     )
-    return NLToolResponse(kind="tool", tool=tool_name, args=tool_args, result=result, meta=meta)
-
-
-# --- Helpers --------------------------------------------------------------
+    return NLToolResponse(
+        kind="tool",
+        tool=result.tool_name or "",
+        args=result.tool_args or {},
+        result=payload,
+        meta=meta,
+    )
 
 
 def _count_rows(result: Any) -> int | None:

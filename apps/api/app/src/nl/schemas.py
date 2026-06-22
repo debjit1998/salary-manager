@@ -27,6 +27,10 @@ class NLMeta(BaseModel):
     cache_read_tokens: int = 0
     cache_creation_tokens: int = 0
     model: str = DEFAULT_MODEL
+    # Number of Anthropic round trips used to answer this question.
+    # 1 = first try succeeded; 2 = first tool call errored, Claude
+    # self-corrected on the retry. See `llm_agent.run_agent`.
+    attempts: int = 1
 
 
 class NLToolResponse(BaseModel):

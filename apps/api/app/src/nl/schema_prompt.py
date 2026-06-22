@@ -78,8 +78,7 @@ def introspect(engine: Engine) -> dict[str, Table]:
 
     # (table, column) -> (foreign_table, foreign_column)
     fks: dict[tuple[str, str], tuple[str, str]] = {
-        (r.table_name, r.column_name): (r.foreign_table, r.foreign_column)
-        for r in fk_rows
+        (r.table_name, r.column_name): (r.foreign_table, r.foreign_column) for r in fk_rows
     }
 
     tables: dict[str, Table] = {}
@@ -117,9 +116,7 @@ def fetch_reference_data(engine: Engine) -> dict[str, list[dict[str, Any]]]:
     queries = {
         "departments": "SELECT id, name FROM departments ORDER BY id",
         "levels": "SELECT id, code, rank FROM levels ORDER BY rank",
-        "currencies": (
-            "SELECT code, name, ratio_to_usd FROM currencies ORDER BY code"
-        ),
+        "currencies": ("SELECT code, name, ratio_to_usd FROM currencies ORDER BY code"),
     }
     out: dict[str, list[dict[str, Any]]] = {}
     with engine.connect() as conn:
@@ -143,21 +140,16 @@ def validate_hints(tables: dict[str, Table], hints: dict[str, Any]) -> None:
     for tname, thints in hints.items():
         table = tables.get(tname)
         if table is None:
-            raise SchemaHintError(
-                f"schema_hints.yaml references unknown table/view: {tname!r}"
-            )
+            raise SchemaHintError(f"schema_hints.yaml references unknown table/view: {tname!r}")
         column_names = {c.name for c in table.columns}
         for cname in (thints or {}).get("columns", {}):
             if cname not in column_names:
                 raise SchemaHintError(
-                    f"schema_hints.yaml references unknown column: "
-                    f"{tname}.{cname!r}"
+                    f"schema_hints.yaml references unknown column: " f"{tname}.{cname!r}"
                 )
 
 
-def _format_reference_rows(
-    name: str, rows: list[dict[str, Any]]
-) -> list[str]:
+def _format_reference_rows(name: str, rows: list[dict[str, Any]]) -> list[str]:
     """One-line summaries of reference-table contents (enum-like data)."""
     if not rows:
         return []
@@ -169,18 +161,12 @@ def _format_reference_rows(
     if name == "levels":
         return [
             "  REFERENCE DATA (id → code, rank):"
-            + "".join(
-                f"\n    {r['id']} = {r['code']} (rank {r['rank']})"
-                for r in rows
-            )
+            + "".join(f"\n    {r['id']} = {r['code']} (rank {r['rank']})" for r in rows)
         ]
     if name == "currencies":
         return [
             "  REFERENCE DATA (code, ratio_to_usd):"
-            + "".join(
-                f"\n    {r['code']} → ratio {r['ratio_to_usd']}"
-                for r in rows
-            )
+            + "".join(f"\n    {r['code']} → ratio {r['ratio_to_usd']}" for r in rows)
         ]
     return []
 

@@ -9,7 +9,7 @@ These run in milliseconds with no docker stack required.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -54,8 +54,8 @@ def test_jwt_expired_raises_expired_signature() -> None:
     expired = jwt.encode(
         {
             "sub": "user-123",
-            "iat": int((datetime.now(timezone.utc) - timedelta(hours=2)).timestamp()),
-            "exp": int((datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()),
+            "iat": int((datetime.now(UTC) - timedelta(hours=2)).timestamp()),
+            "exp": int((datetime.now(UTC) - timedelta(hours=1)).timestamp()),
         },
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
@@ -81,9 +81,7 @@ def test_jwt_wrong_secret_rejected() -> None:
     token = jwt.encode(
         {
             "sub": "user-123",
-            "exp": int(
-                (datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()
-            ),
+            "exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
         },
         "completely-different-secret",
         algorithm=settings.jwt_algorithm,
@@ -98,9 +96,7 @@ def test_jwt_wrong_algorithm_rejected() -> None:
     token = jwt.encode(
         {
             "sub": "user-123",
-            "exp": int(
-                (datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()
-            ),
+            "exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
         },
         settings.jwt_secret,
         algorithm="HS512",

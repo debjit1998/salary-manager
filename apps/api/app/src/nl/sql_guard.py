@@ -80,24 +80,18 @@ def validate_select(sql: str) -> str:
 
     statements = [s for s in statements if s is not None]
     if len(statements) != 1:
-        raise SqlGuardError(
-            f"only single statements allowed, got {len(statements)}"
-        )
+        raise SqlGuardError(f"only single statements allowed, got {len(statements)}")
 
     root = statements[0]
     if not isinstance(root, exp.Select):
-        raise SqlGuardError(
-            f"only SELECT allowed; got {type(root).__name__}"
-        )
+        raise SqlGuardError(f"only SELECT allowed; got {type(root).__name__}")
 
     # Walk the entire tree (including subqueries / CTEs) and reject any
     # forbidden node type.
     for node in root.walk():
         n = node[0] if isinstance(node, tuple) else node
         if isinstance(n, FORBIDDEN_NODES):
-            raise SqlGuardError(
-                f"forbidden statement type: {type(n).__name__}"
-            )
+            raise SqlGuardError(f"forbidden statement type: {type(n).__name__}")
         if isinstance(n, exp.Func):
             fname = (n.name or "").lower()
             if fname in FORBIDDEN_FUNCTIONS:

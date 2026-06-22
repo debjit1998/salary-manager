@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-
 # --- Auth gate ----------------------------------------------------------
 
 
@@ -20,9 +19,7 @@ def test_headcount_by_requires_auth(client: TestClient) -> None:
 # --- headcount_by -------------------------------------------------------
 
 
-def test_headcount_by_country(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_headcount_by_country(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get("/analytics/headcount-by", params={"dimension": "country"})
     assert r.status_code == 200
     body = r.json()
@@ -35,9 +32,7 @@ def test_headcount_by_country(
 
 
 def test_headcount_by_level_is_rank_ordered(auth_client: TestClient) -> None:
-    body = auth_client.get(
-        "/analytics/headcount-by", params={"dimension": "level"}
-    ).json()
+    body = auth_client.get("/analytics/headcount-by", params={"dimension": "level"}).json()
     codes = [r["dimension"] for r in body["rows"]]
     # Levels appear in rank order (L3, L4, L5 in that order in the seed)
     sorted_codes = sorted(codes, key=lambda c: int(c[1:]))
@@ -66,12 +61,8 @@ def test_headcount_by_unknown_dimension_returns_422(
 # --- avg_salary_by ------------------------------------------------------
 
 
-def test_avg_salary_by_country(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
-    body = auth_client.get(
-        "/analytics/avg-salary-by", params={"dimension": "country"}
-    ).json()
+def test_avg_salary_by_country(auth_client: TestClient, seeded_data: dict) -> None:
+    body = auth_client.get("/analytics/avg-salary-by", params={"dimension": "country"}).json()
     rows = {r["dimension"]: r for r in body["rows"]}
     # US row covers Alice, Bob, Eve → all real positive averages
     assert "US" in rows
@@ -110,9 +101,7 @@ def test_salary_distribution_buckets(auth_client: TestClient) -> None:
 # --- top_n_earners ------------------------------------------------------
 
 
-def test_top_earners_returns_descending(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_top_earners_returns_descending(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.post("/analytics/top-earners", json={"n": 3})
     assert r.status_code == 200
     rows = r.json()["rows"]
@@ -133,9 +122,7 @@ def test_top_earners_n_validation(auth_client: TestClient) -> None:
 # --- comp_ratio_vs_band -------------------------------------------------
 
 
-def test_comp_ratio_vs_band_finds_carla_below(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_comp_ratio_vs_band_finds_carla_below(auth_client: TestClient, seeded_data: dict) -> None:
     body = auth_client.get("/analytics/comp-ratio-vs-band").json()
     assert body["summary"]["below"] >= 1
     # Carla is the only below-band in the seed
@@ -160,10 +147,7 @@ def test_raises_in_period_finds_alice_raise(
     body = r.json()
     # Alice has one 'raise' on 2023-04-01 in the seed; the only one
     assert body["count"] >= 1
-    found = [
-        e for e in body["rows"]
-        if e["employee_no"] == "TEST-00001" and e["reason"] == "raise"
-    ]
+    found = [e for e in body["rows"] if e["employee_no"] == "TEST-00001" and e["reason"] == "raise"]
     assert found, "Alice's 2023 raise should appear"
 
 
@@ -189,9 +173,7 @@ def test_raises_in_period_rejects_backwards_dates(auth_client: TestClient) -> No
 # --- headcount_change ---------------------------------------------------
 
 
-def test_headcount_change_by_country(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_headcount_change_by_country(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.post(
         "/analytics/headcount-change",
         json={

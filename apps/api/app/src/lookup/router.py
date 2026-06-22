@@ -23,15 +23,15 @@ def get_lookups(
     session: Session = Depends(get_session),
     _user: CurrentUser = Depends(get_current_user),
 ) -> LookupsResponse:
-    depts = session.execute(
-        text("SELECT id, name FROM departments ORDER BY name")
-    ).mappings().all()
-    levels = session.execute(
-        text("SELECT id, code, rank FROM levels ORDER BY rank")
-    ).mappings().all()
-    currencies = session.execute(
-        text("SELECT code, name, ratio_to_usd FROM currencies ORDER BY code")
-    ).mappings().all()
+    depts = session.execute(text("SELECT id, name FROM departments ORDER BY name")).mappings().all()
+    levels = (
+        session.execute(text("SELECT id, code, rank FROM levels ORDER BY rank")).mappings().all()
+    )
+    currencies = (
+        session.execute(text("SELECT code, name, ratio_to_usd FROM currencies ORDER BY code"))
+        .mappings()
+        .all()
+    )
     return LookupsResponse(
         departments=[Department(**dict(r)) for r in depts],
         levels=[Level(**dict(r)) for r in levels],

@@ -114,9 +114,7 @@ def top_earners(
     session: Session = Depends(get_session),
     _user: CurrentUser = Depends(get_current_user),
 ) -> TopEarnersResult:
-    return TopEarnersResult(
-        **q.top_n_earners(session, n=body.n, filters=body.filters)
-    )
+    return TopEarnersResult(**q.top_n_earners(session, n=body.n, filters=body.filters))
 
 
 @router.get("/comp-ratio-vs-band", response_model=CompRatioVsBandResult)
@@ -137,9 +135,7 @@ def raises_in_period(
     if body.start > body.end:
         raise HTTPException(status_code=400, detail="start must be <= end")
     return RaisesInPeriodResult(
-        **q.raises_in_period(
-            session, start=body.start, end=body.end, filters=body.filters
-        )
+        **q.raises_in_period(session, start=body.start, end=body.end, filters=body.filters)
     )
 
 

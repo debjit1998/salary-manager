@@ -11,7 +11,6 @@ import pytest
 
 from app.src.employee.queries import ALLOWED_SORTS, build_filters, parse_sort
 
-
 # --- parse_sort ----------------------------------------------------------
 
 

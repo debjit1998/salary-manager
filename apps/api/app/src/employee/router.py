@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import csv
 import io
+from collections.abc import Iterator
 from datetime import date
-from typing import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -289,9 +289,7 @@ def update_employee(
         # Reject manager_id pointing at a non-existent employee or at self.
         if "manager_id" in updates and updates["manager_id"]:
             if updates["manager_id"] == employee_id:
-                raise HTTPException(
-                    status_code=400, detail="manager_id cannot be self"
-                )
+                raise HTTPException(status_code=400, detail="manager_id cannot be self")
             if not q.employee_exists(session, updates["manager_id"]):
                 raise HTTPException(status_code=400, detail="manager_id not found")
         q.update_employee(session, employee_id, updates)
@@ -327,9 +325,7 @@ def add_salary_change(
     # reason='promo'), bump the employee's level in the same
     # transaction so the row and the org state stay consistent.
     if body.new_level_id is not None:
-        q.update_employee(
-            session, employee_id, {"level_id": body.new_level_id}
-        )
+        q.update_employee(session, employee_id, {"level_id": body.new_level_id})
     session.commit()
     return SalaryChangeOut(**row)
 

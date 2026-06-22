@@ -20,7 +20,7 @@ from anthropic import Anthropic
 
 from app.settings import settings
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-opus-4-7"
 DEFAULT_MAX_TOKENS = 2048
 
 INSTRUCTIONS = (
@@ -31,6 +31,16 @@ INSTRUCTIONS = (
     "against a read-only Postgres role with a 10-second timeout, and "
     "is force-LIMITed to 1000 rows. There is no other tool — every "
     "question is answered by writing SQL.\n\n"
+    "HARD RULES (the backend's sqlglot guard rejects violations — wasted "
+    "round-trip):\n"
+    "  - Emit ONE SELECT. No DML (INSERT/UPDATE/DELETE/MERGE), no DDL "
+    "(CREATE/ALTER/DROP/TRUNCATE), no SET / RESET / SET LOCAL / GRANT / "
+    "REVOKE / BEGIN / COMMIT / ROLLBACK / SAVEPOINT / LOCK / COPY. Role "
+    "and timeout are managed by the backend — don't touch them.\n"
+    "  - PERCENTILE_CONT always returns double precision (not numeric), "
+    "so `ROUND(PERCENTILE_CONT(…), 2)` fails. Cast first: "
+    "`ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x)::numeric, 2)`. "
+    "Same trap for any other aggregate that returns float.\n\n"
     "WRITING GOOD SQL:\n"
     "  - Use the table + view definitions in the schema below; pay "
     "attention to NOTE lines (e.g. 'prefer the employees_current_"
@@ -67,9 +77,7 @@ def get_client() -> Anthropic:
     global _client
     if _client is None:
         if not settings.anthropic_api_key:
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set; NL query feature disabled"
-            )
+            raise RuntimeError("ANTHROPIC_API_KEY is not set; NL query feature disabled")
         _client = Anthropic(api_key=settings.anthropic_api_key)
     return _client
 

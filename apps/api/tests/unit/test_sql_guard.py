@@ -12,7 +12,6 @@ import pytest
 
 from app.src.nl.sql_guard import MAX_ROWS, SqlGuardError, validate_select
 
-
 # --- Happy paths --------------------------------------------------------
 
 

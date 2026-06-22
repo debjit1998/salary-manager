@@ -42,16 +42,14 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 # ---- App imports (must come AFTER setting DATABASE_URL) ------------------
 
+from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.engine import Connection  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 
-from fastapi.testclient import TestClient  # noqa: E402
-
+import app.db as app_db  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
-
-import app.db as app_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.src.common.auth import hash_password  # noqa: E402
 
@@ -201,10 +199,7 @@ def seeded_data() -> dict[str, object]:
         # Levels
         for code, rank in (("L3", 3), ("L4", 4), ("L5", 5)):
             c.execute(
-                text(
-                    "INSERT INTO levels (code, rank) VALUES (:c, :r) "
-                    "ON CONFLICT DO NOTHING"
-                ),
+                text("INSERT INTO levels (code, rank) VALUES (:c, :r) " "ON CONFLICT DO NOTHING"),
                 {"c": code, "r": rank},
             )
         level_rows = c.execute(text("SELECT id, code FROM levels")).all()
@@ -250,43 +245,70 @@ def seeded_data() -> dict[str, object]:
         # Ordering is intentional: emp[0] is L5 with no manager (top of chain).
         employees = [
             {
-                "no": "TEST-00001", "first": "Alice", "last": "Anderson",
-                "email": "alice.anderson@test.org", "country": "US",
-                "dept_id": depts["Engineering"], "level_id": levels["L5"],
-                "employment_type": "full_time", "hire_date": "2022-01-15",
-                "salary": [("2022-01-15", 230000, "USD", "hire"),
-                           ("2023-04-01", 245000, "USD", "raise")],
+                "no": "TEST-00001",
+                "first": "Alice",
+                "last": "Anderson",
+                "email": "alice.anderson@test.org",
+                "country": "US",
+                "dept_id": depts["Engineering"],
+                "level_id": levels["L5"],
+                "employment_type": "full_time",
+                "hire_date": "2022-01-15",
+                "salary": [
+                    ("2022-01-15", 230000, "USD", "hire"),
+                    ("2023-04-01", 245000, "USD", "raise"),
+                ],
                 "grants": [("2022-02-01", 1000)],
             },
             {
-                "no": "TEST-00002", "first": "Bob", "last": "Brown",
-                "email": "bob.brown@test.org", "country": "US",
-                "dept_id": depts["Engineering"], "level_id": levels["L4"],
-                "employment_type": "full_time", "hire_date": "2023-03-10",
+                "no": "TEST-00002",
+                "first": "Bob",
+                "last": "Brown",
+                "email": "bob.brown@test.org",
+                "country": "US",
+                "dept_id": depts["Engineering"],
+                "level_id": levels["L4"],
+                "employment_type": "full_time",
+                "hire_date": "2023-03-10",
                 "salary": [("2023-03-10", 165000, "USD", "hire")],
                 "grants": [("2023-04-01", 500)],
             },
             {
-                "no": "TEST-00003", "first": "Carla", "last": "Clarke",
-                "email": "carla.clarke@test.org", "country": "UK",
-                "dept_id": depts["Sales"], "level_id": levels["L4"],
-                "employment_type": "full_time", "hire_date": "2023-06-01",
+                "no": "TEST-00003",
+                "first": "Carla",
+                "last": "Clarke",
+                "email": "carla.clarke@test.org",
+                "country": "UK",
+                "dept_id": depts["Sales"],
+                "level_id": levels["L4"],
+                "employment_type": "full_time",
+                "hire_date": "2023-06-01",
                 "salary": [("2023-06-01", 90000, "GBP", "hire")],  # BELOW band
                 "grants": [],
             },
             {
-                "no": "TEST-00004", "first": "Devi", "last": "Desai",
-                "email": "devi.desai@test.org", "country": "IN",
-                "dept_id": depts["Engineering"], "level_id": levels["L4"],
-                "employment_type": "contractor", "hire_date": "2024-01-08",
+                "no": "TEST-00004",
+                "first": "Devi",
+                "last": "Desai",
+                "email": "devi.desai@test.org",
+                "country": "IN",
+                "dept_id": depts["Engineering"],
+                "level_id": levels["L4"],
+                "employment_type": "contractor",
+                "hire_date": "2024-01-08",
                 "salary": [("2024-01-08", 3200000, "INR", "hire")],
                 "grants": [],
             },
             {
-                "no": "TEST-00005", "first": "Eve", "last": "Evans",
-                "email": "eve.evans@test.org", "country": "US",
-                "dept_id": depts["Sales"], "level_id": levels["L3"],
-                "employment_type": "part_time", "hire_date": "2024-09-20",
+                "no": "TEST-00005",
+                "first": "Eve",
+                "last": "Evans",
+                "email": "eve.evans@test.org",
+                "country": "US",
+                "dept_id": depts["Sales"],
+                "level_id": levels["L3"],
+                "employment_type": "part_time",
+                "hire_date": "2024-09-20",
                 "salary": [("2024-09-20", 125000, "USD", "hire")],
                 "grants": [],
             },
@@ -316,7 +338,11 @@ def seeded_data() -> dict[str, object]:
                         "VALUES (:e, :d, :a, :cur, :r, :u)"
                     ),
                     {
-                        "e": eid, "d": d, "a": amt, "cur": cur, "r": reason,
+                        "e": eid,
+                        "d": d,
+                        "a": amt,
+                        "cur": cur,
+                        "r": reason,
                         "u": out["hr_user_id"],
                     },
                 )

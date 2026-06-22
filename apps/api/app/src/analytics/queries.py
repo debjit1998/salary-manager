@@ -54,9 +54,7 @@ _DIMENSION_SPEC: dict[str, dict[str, str]] = {
 def _dimension(name: str) -> dict[str, str]:
     spec = _DIMENSION_SPEC.get(name)
     if spec is None:
-        raise ValueError(
-            f"unsupported dimension: {name!r}. valid: {sorted(_DIMENSION_SPEC)}"
-        )
+        raise ValueError(f"unsupported dimension: {name!r}. valid: {sorted(_DIMENSION_SPEC)}")
     return spec
 
 
@@ -183,19 +181,17 @@ def avg_salary_by(
 
 # Fixed USD buckets. The top bucket has upper=None to signal open-ended.
 _SALARY_BUCKETS: list[tuple[str, int, int | None]] = [
-    ("0-50k",      0,        50_000),
-    ("50-100k",    50_000,   100_000),
-    ("100-150k",   100_000,  150_000),
-    ("150-200k",   150_000,  200_000),
-    ("200-300k",   200_000,  300_000),
-    ("300-500k",   300_000,  500_000),
-    ("500k+",      500_000,  None),
+    ("0-50k", 0, 50_000),
+    ("50-100k", 50_000, 100_000),
+    ("100-150k", 100_000, 150_000),
+    ("150-200k", 150_000, 200_000),
+    ("200-300k", 200_000, 300_000),
+    ("300-500k", 300_000, 500_000),
+    ("500k+", 500_000, None),
 ]
 
 
-def salary_distribution(
-    session: Session, *, filters: EmployeeFilters | None = None
-) -> dict:
+def salary_distribution(session: Session, *, filters: EmployeeFilters | None = None) -> dict:
     where, params = _build_employee_where(filters)
     sql = f"""
         SELECT ecs.amount_usd
@@ -255,9 +251,7 @@ def top_n_earners(
 # --- Tool 5: comp_ratio_vs_band -----------------------------------------
 
 
-def comp_ratio_vs_band(
-    session: Session, *, filters: EmployeeFilters | None = None
-) -> dict:
+def comp_ratio_vs_band(session: Session, *, filters: EmployeeFilters | None = None) -> dict:
     where, params = _build_employee_where(filters)
     sql = f"""
         WITH labelled AS (
@@ -381,8 +375,7 @@ def headcount_change(
         ORDER BY {order_by}
     """
     rows = [
-        dict(r)
-        for r in session.execute(text(sql), {"start": start, "end": end}).mappings().all()
+        dict(r) for r in session.execute(text(sql), {"start": start, "end": end}).mappings().all()
     ]
     return {"rows": rows, "dimension": dimension, "start": start, "end": end}
 

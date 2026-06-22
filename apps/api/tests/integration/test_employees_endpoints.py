@@ -14,7 +14,6 @@ from datetime import date
 
 from fastapi.testclient import TestClient
 
-
 # --- Auth gate ----------------------------------------------------------
 
 
@@ -31,9 +30,7 @@ def test_detail_requires_auth(client: TestClient, seeded_data: dict) -> None:
 # --- List endpoint ------------------------------------------------------
 
 
-def test_list_returns_seeded_employees(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_list_returns_seeded_employees(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get("/employees")
     assert r.status_code == 200
     body = r.json()
@@ -56,9 +53,7 @@ def test_list_pagination(auth_client: TestClient, seeded_data: dict) -> None:
     assert ids1.isdisjoint(ids2)
 
 
-def test_list_filter_by_country(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_list_filter_by_country(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get("/employees", params={"country": "UK", "size": 100})
     body = r.json()
     assert r.status_code == 200
@@ -69,21 +64,15 @@ def test_list_filter_by_country(
     assert any(i["id"] == carla_id for i in body["items"])
 
 
-def test_list_filter_by_employment_type(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
-    r = auth_client.get(
-        "/employees", params={"employment_type": "contractor", "size": 100}
-    )
+def test_list_filter_by_employment_type(auth_client: TestClient, seeded_data: dict) -> None:
+    r = auth_client.get("/employees", params={"employment_type": "contractor", "size": 100})
     body = r.json()
     types = {i["employment_type"] for i in body["items"]}
     assert types == {"contractor"}
     assert any(i["id"] == seeded_data["emp_devi_in_l4_id"] for i in body["items"])
 
 
-def test_list_filter_by_level_and_dept(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_list_filter_by_level_and_dept(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get(
         "/employees",
         params={
@@ -102,21 +91,15 @@ def test_list_filter_by_level_and_dept(
         assert item["department"] == "Engineering"
 
 
-def test_list_search_by_name(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_list_search_by_name(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get("/employees", params={"q": "carla", "size": 100})
     body = r.json()
     returned = {i["id"] for i in body["items"]}
     assert seeded_data["emp_carla_uk_l4_id"] in returned
 
 
-def test_list_search_by_email(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
-    r = auth_client.get(
-        "/employees", params={"q": "bob.brown@test.org", "size": 100}
-    )
+def test_list_search_by_email(auth_client: TestClient, seeded_data: dict) -> None:
+    r = auth_client.get("/employees", params={"q": "bob.brown@test.org", "size": 100})
     body = r.json()
     returned = {i["id"] for i in body["items"]}
     assert seeded_data["emp_bob_us_l4_id"] in returned
@@ -134,9 +117,7 @@ def test_list_sort_invalid_returns_400(auth_client: TestClient) -> None:
     assert r.status_code == 400
 
 
-def test_list_includes_band_position(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_list_includes_band_position(auth_client: TestClient, seeded_data: dict) -> None:
     """Carla is seeded at £90k for a UK L4 band of 100-135k → below band."""
     r = auth_client.get(f"/employees/{seeded_data['emp_carla_uk_l4_id']}")
     assert r.status_code == 200
@@ -147,9 +128,7 @@ def test_list_includes_band_position(
 # --- Detail endpoint ----------------------------------------------------
 
 
-def test_detail_returns_history_and_grants(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_detail_returns_history_and_grants(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get(f"/employees/{seeded_data['emp_alice_us_l5_id']}")
     assert r.status_code == 200
     body = r.json()
@@ -158,7 +137,9 @@ def test_detail_returns_history_and_grants(
     assert body["level"] == "L5"
     # Alice has 2 salary changes (hire + raise) and 1 equity grant
     assert len(body["salary_changes"]) == 2
-    assert body["salary_changes"][0]["effective_date"] >= body["salary_changes"][1]["effective_date"]
+    assert (
+        body["salary_changes"][0]["effective_date"] >= body["salary_changes"][1]["effective_date"]
+    )
     assert len(body["equity_grants"]) == 1
     assert body["total_shares"] == 1000
     # Alice has 2 direct reports (Bob, Carla) and no manager
@@ -166,12 +147,8 @@ def test_detail_returns_history_and_grants(
     assert body["direct_reports_count"] == 2
 
 
-def test_detail_current_salary_is_latest(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
-    body = auth_client.get(
-        f"/employees/{seeded_data['emp_alice_us_l5_id']}"
-    ).json()
+def test_detail_current_salary_is_latest(auth_client: TestClient, seeded_data: dict) -> None:
+    body = auth_client.get(f"/employees/{seeded_data['emp_alice_us_l5_id']}").json()
     assert body["current_salary"]["amount"] == "245000.00"
     assert body["current_salary"]["effective_date"] == "2023-04-01"
 
@@ -184,26 +161,20 @@ def test_detail_404_for_unknown(auth_client: TestClient) -> None:
 # --- Update endpoint ----------------------------------------------------
 
 
-def test_patch_updates_employment_type(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_patch_updates_employment_type(auth_client: TestClient, seeded_data: dict) -> None:
     eid = seeded_data["emp_eve_us_l3_id"]
     r = auth_client.patch(f"/employees/{eid}", json={"employment_type": "full_time"})
     assert r.status_code == 200
     assert r.json()["employment_type"] == "full_time"
 
 
-def test_patch_rejects_self_manager(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_patch_rejects_self_manager(auth_client: TestClient, seeded_data: dict) -> None:
     eid = seeded_data["emp_bob_us_l4_id"]
     r = auth_client.patch(f"/employees/{eid}", json={"manager_id": eid})
     assert r.status_code == 400
 
 
-def test_patch_rejects_unknown_manager(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_patch_rejects_unknown_manager(auth_client: TestClient, seeded_data: dict) -> None:
     eid = seeded_data["emp_bob_us_l4_id"]
     r = auth_client.patch(
         f"/employees/{eid}",
@@ -223,9 +194,7 @@ def test_patch_404_for_unknown(auth_client: TestClient) -> None:
 # --- Salary-change endpoint ---------------------------------------------
 
 
-def test_post_salary_change_appends_to_history(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_post_salary_change_appends_to_history(auth_client: TestClient, seeded_data: dict) -> None:
     eid = seeded_data["emp_bob_us_l4_id"]
     today = date.today().isoformat()
     r = auth_client.post(
@@ -265,9 +234,7 @@ def test_post_salary_change_rejects_negative_amount(
     assert r.status_code == 422
 
 
-def test_post_salary_change_rejects_bad_reason(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_post_salary_change_rejects_bad_reason(auth_client: TestClient, seeded_data: dict) -> None:
     eid = seeded_data["emp_bob_us_l4_id"]
     r = auth_client.post(
         f"/employees/{eid}/salary-changes",
@@ -299,9 +266,7 @@ def test_post_salary_change_404_for_unknown_employee(
 # --- Equity-grant endpoint ----------------------------------------------
 
 
-def test_post_equity_grant_appends(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_post_equity_grant_appends(auth_client: TestClient, seeded_data: dict) -> None:
     eid = seeded_data["emp_bob_us_l4_id"]
     r = auth_client.post(
         f"/employees/{eid}/equity-grants",
@@ -315,9 +280,7 @@ def test_post_equity_grant_appends(
     assert detail["total_shares"] == 750
 
 
-def test_post_equity_grant_rejects_zero_shares(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_post_equity_grant_rejects_zero_shares(auth_client: TestClient, seeded_data: dict) -> None:
     eid = seeded_data["emp_bob_us_l4_id"]
     r = auth_client.post(
         f"/employees/{eid}/equity-grants",
@@ -356,9 +319,7 @@ def test_export_requires_auth(client: TestClient) -> None:
     assert r.status_code == 401
 
 
-def test_export_returns_streaming_csv(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_export_returns_streaming_csv(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get("/employees/export.csv")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
@@ -373,9 +334,7 @@ def test_export_returns_streaming_csv(
     assert len(rows) - 1 >= len(seeded_data["all_employee_ids"])
 
 
-def test_export_respects_country_filter(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_export_respects_country_filter(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get("/employees/export.csv", params={"country": "UK"})
     assert r.status_code == 200
     reader = csv.DictReader(io.StringIO(r.text))
@@ -386,13 +345,9 @@ def test_export_respects_country_filter(
     assert any(row["first_name"] == "Carla" for row in body)
 
 
-def test_export_respects_multi_value_filter(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_export_respects_multi_value_filter(auth_client: TestClient, seeded_data: dict) -> None:
     # axios on the FE sends repeated keys; httpx accepts a list for the same.
-    r = auth_client.get(
-        "/employees/export.csv", params=[("country", "UK"), ("country", "IN")]
-    )
+    r = auth_client.get("/employees/export.csv", params=[("country", "UK"), ("country", "IN")])
     assert r.status_code == 200
     reader = csv.DictReader(io.StringIO(r.text))
     countries = {row["country"] for row in reader}
@@ -401,9 +356,7 @@ def test_export_respects_multi_value_filter(
 
 
 def test_export_respects_sort(auth_client: TestClient) -> None:
-    r = auth_client.get(
-        "/employees/export.csv", params={"sort": "-hire_date"}
-    )
+    r = auth_client.get("/employees/export.csv", params={"sort": "-hire_date"})
     assert r.status_code == 200
     reader = csv.DictReader(io.StringIO(r.text))
     hire_dates = [row["hire_date"] for row in reader]
@@ -411,9 +364,7 @@ def test_export_respects_sort(auth_client: TestClient) -> None:
 
 
 def test_export_invalid_sort_returns_400(auth_client: TestClient) -> None:
-    r = auth_client.get(
-        "/employees/export.csv", params={"sort": "not_a_real_column"}
-    )
+    r = auth_client.get("/employees/export.csv", params={"sort": "not_a_real_column"})
     assert r.status_code == 400
 
 
@@ -427,9 +378,7 @@ def test_export_empty_when_filter_matches_nothing(
     assert rows == [_EXPORT_HEADER]
 
 
-def test_export_search_narrows_rows(
-    auth_client: TestClient, seeded_data: dict
-) -> None:
+def test_export_search_narrows_rows(auth_client: TestClient, seeded_data: dict) -> None:
     r = auth_client.get("/employees/export.csv", params={"q": "carla"})
     assert r.status_code == 200
     reader = csv.DictReader(io.StringIO(r.text))

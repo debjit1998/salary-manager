@@ -15,7 +15,6 @@ from app.src.analytics.queries import (
 )
 from app.src.common.schemas import EmployeeFilters
 
-
 # --- _dimension ----------------------------------------------------------
 
 
@@ -49,9 +48,7 @@ def test_where_includes_country_list() -> None:
 
 
 def test_where_country_multi_select() -> None:
-    where, params = _build_employee_where(
-        EmployeeFilters(country=["US", "UK"])
-    )
+    where, params = _build_employee_where(EmployeeFilters(country=["US", "UK"]))
     assert "e.country = ANY(:country)" in where
     assert params == {"country": ["US", "UK"]}
 
@@ -91,9 +88,7 @@ def test_where_status_empty_list_falls_back_to_active() -> None:
 
 
 def test_where_alias_override() -> None:
-    where, _ = _build_employee_where(
-        EmployeeFilters(country=["US"]), alias="emp"
-    )
+    where, _ = _build_employee_where(EmployeeFilters(country=["US"]), alias="emp")
     assert "emp.country = ANY(:country)" in where
     assert "emp.status = 'active'" in where
 
@@ -110,9 +105,7 @@ def test_where_salary_band_uses_case_expression() -> None:
 
 
 def test_where_band_position_uses_case_expression() -> None:
-    where, params = _build_employee_where(
-        EmployeeFilters(band_position=["below", "above"])
-    )
+    where, params = _build_employee_where(EmployeeFilters(band_position=["below", "above"]))
     assert "CASE" in where
     assert "cb.band_min" in where
     assert "= ANY(:band_position)" in where

@@ -24,7 +24,8 @@ the dashboard panels. They're just not exposed to the LLM anymore.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -34,15 +35,27 @@ from .sql_guard import validate_select
 
 def _execute_sql(session: Session, args: dict[str, Any]) -> dict:
     """Validate the SQL via sql_guard, then run it on the read-only
-    `nl_readonly` Postgres role with a 10-second statement_timeout."""
+    `nl_readonly` Postgres role with a 10-second statement_timeout.
+
+    Wrapped in a SAVEPOINT (`session.begin_nested()`) so that if the
+    LLM-generated SELECT errors, Postgres aborts ONLY this nested scope.
+    Without that, the outer transaction enters the aborted state, the
+    cleanup `RESET ROLE` fails with `InFailedSqlTransaction`, and that
+    cleanup error replaces the original error in the response — masking
+    the real problem from the LLM and the user.
+
+    `SET LOCAL` changes inside the savepoint are rolled back automatically
+    on failure. On success we run `RESET` explicitly so the role/timeout
+    don't leak into the outer transaction (which still services logging
+    and any further tool calls in the same request).
+    """
     safe_sql = validate_select(str(args.get("sql", "")))
-    session.execute(text("SET LOCAL ROLE nl_readonly"))
-    session.execute(text("SET LOCAL statement_timeout = '10s'"))
-    try:
+    with session.begin_nested():
+        session.execute(text("SET LOCAL ROLE nl_readonly"))
+        session.execute(text("SET LOCAL statement_timeout = '10s'"))
         result = session.execute(text(safe_sql))
         cols = list(result.keys())
         rows = [dict(r._mapping) for r in result]
-    finally:
         session.execute(text("RESET ROLE"))
         session.execute(text("RESET statement_timeout"))
     return {"sql": safe_sql, "columns": cols, "rows": rows}

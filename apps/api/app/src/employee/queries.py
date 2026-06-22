@@ -7,7 +7,8 @@ unit-tested against without a DB.
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -53,9 +54,7 @@ def parse_sort(sort: str | None) -> tuple[str, str]:
     key = sort[1:] if descending else sort
     column = ALLOWED_SORTS.get(key)
     if column is None:
-        raise ValueError(
-            f"unsupported sort key: {key!r}. valid keys: {sorted(ALLOWED_SORTS)}"
-        )
+        raise ValueError(f"unsupported sort key: {key!r}. valid keys: {sorted(ALLOWED_SORTS)}")
     return column, "DESC" if descending else "ASC"
 
 
@@ -85,8 +84,7 @@ def build_filters(
 
     if q:
         conds.append(
-            "(lower(e.first_name || ' ' || e.last_name) LIKE :q "
-            "OR lower(e.email) LIKE :q)"
+            "(lower(e.first_name || ' ' || e.last_name) LIKE :q " "OR lower(e.email) LIKE :q)"
         )
         params["q"] = f"%{q.lower()}%"
     if dept_id:
@@ -256,10 +254,7 @@ def iter_employees_for_export(
         salary_band=salary_band,
     )
     where_clause = f"WHERE {where_body}" if where_body else ""
-    sql = (
-        f"{_LIST_COLUMNS} {_LIST_FROM} {where_clause} "
-        f"ORDER BY {column} {direction}, e.id"
-    )
+    sql = f"{_LIST_COLUMNS} {_LIST_FROM} {where_clause} " f"ORDER BY {column} {direction}, e.id"
     result = session.execute(text(sql), params).mappings()
 
     def _iter() -> Iterator[dict]:
@@ -366,9 +361,7 @@ _UPDATABLE_COLUMNS = (
 )
 
 
-def update_employee(
-    session: Session, employee_id: str, updates: dict[str, Any]
-) -> bool:
+def update_employee(session: Session, employee_id: str, updates: dict[str, Any]) -> bool:
     """Apply PATCH updates. Returns True if a row was updated.
 
     Filters `updates` to the whitelist of columns we allow PATCHing.
@@ -412,18 +405,22 @@ def insert_salary_change(
             note,
             created_at::date  AS created_at
     """
-    row = session.execute(
-        text(sql),
-        {
-            "employee_id": employee_id,
-            "effective_date": effective_date,
-            "amount": amount,
-            "currency_code": currency_code,
-            "reason": reason,
-            "note": note,
-            "created_by": created_by,
-        },
-    ).mappings().one()
+    row = (
+        session.execute(
+            text(sql),
+            {
+                "employee_id": employee_id,
+                "effective_date": effective_date,
+                "amount": amount,
+                "currency_code": currency_code,
+                "reason": reason,
+                "note": note,
+                "created_by": created_by,
+            },
+        )
+        .mappings()
+        .one()
+    )
     return dict(row)
 
 
@@ -444,15 +441,19 @@ def insert_equity_grant(
             shares,
             created_at::date  AS created_at
     """
-    row = session.execute(
-        text(sql),
-        {
-            "employee_id": employee_id,
-            "grant_date": grant_date,
-            "shares": shares,
-            "created_by": created_by,
-        },
-    ).mappings().one()
+    row = (
+        session.execute(
+            text(sql),
+            {
+                "employee_id": employee_id,
+                "grant_date": grant_date,
+                "shares": shares,
+                "created_by": created_by,
+            },
+        )
+        .mappings()
+        .one()
+    )
     return dict(row)
 
 

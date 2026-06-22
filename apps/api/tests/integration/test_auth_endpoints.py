@@ -15,7 +15,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi.testclient import TestClient
@@ -81,9 +81,7 @@ def test_login_cookie_carries_configured_domain_and_secure(
     assert "SameSite=lax" in set_cookie
 
 
-def test_login_wrong_password_returns_401(
-    client: TestClient, test_user: dict[str, str]
-) -> None:
+def test_login_wrong_password_returns_401(client: TestClient, test_user: dict[str, str]) -> None:
     r = client.post(
         "/auth/login",
         json={"email": test_user["email"], "password": "not-the-password"},
@@ -113,14 +111,12 @@ def test_me_with_garbage_cookie_returns_401(client: TestClient) -> None:
     assert r.status_code == 401
 
 
-def test_me_with_expired_jwt_returns_401(
-    client: TestClient, test_user: dict[str, str]
-) -> None:
+def test_me_with_expired_jwt_returns_401(client: TestClient, test_user: dict[str, str]) -> None:
     expired = jwt.encode(
         {
             "sub": test_user["id"],
-            "iat": int((datetime.now(timezone.utc) - timedelta(hours=2)).timestamp()),
-            "exp": int((datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()),
+            "iat": int((datetime.now(UTC) - timedelta(hours=2)).timestamp()),
+            "exp": int((datetime.now(UTC) - timedelta(hours=1)).timestamp()),
         },
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
@@ -135,10 +131,8 @@ def test_me_with_jwt_for_nonexistent_user_returns_401(client: TestClient) -> Non
     token = jwt.encode(
         {
             "sub": "00000000-0000-0000-0000-000000000000",
-            "iat": int(datetime.now(timezone.utc).timestamp()),
-            "exp": int(
-                (datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()
-            ),
+            "iat": int(datetime.now(UTC).timestamp()),
+            "exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp()),
         },
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
@@ -161,9 +155,7 @@ def test_logout_clears_cookie(client: TestClient, test_user: dict[str, str]) -> 
     assert me.status_code == 401
 
 
-def test_login_email_is_case_insensitive(
-    client: TestClient, test_user: dict[str, str]
-) -> None:
+def test_login_email_is_case_insensitive(client: TestClient, test_user: dict[str, str]) -> None:
     upper = test_user["email"].upper()
     r = client.post(
         "/auth/login",
