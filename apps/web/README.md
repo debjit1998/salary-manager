@@ -87,7 +87,8 @@ middleware.ts                        # cookie-existence auth gate
 ## Employee grid (`/employees`)
 
 - Toolbar: global filter icon (employment type) + debounced search input
-  + `N results` + `‹ page / total ›` paginator
+  + CSV download (every row matching the current filter+sort, ignores
+  pagination) + `N results` + `‹ page / total ›` paginator
 - Per-column **multi-select** filters via column header icon: Country,
   Department, Level, Band position. Selected count shows as a badge on
   the filter icon

@@ -226,7 +226,7 @@ past), gives a free audit trail, and simplifies the "current salary" view.
 - **NL feature:** schema-linking via embeddings (RAG) for when the
   schema grows past ~30 tables; CI-gated eval suite with accuracy
   thresholds; per-tool contract versioning
-- Bulk CSV import / export
+- Bulk CSV import (export is already in — see `GET /employees/export.csv`)
 - Multi-user with RBAC + invitations
 - Approval workflow for raises above a configurable threshold
 - Live FX with a daily refresh job

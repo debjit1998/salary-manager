@@ -7,7 +7,7 @@ unit-tested against without a DB.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -219,6 +219,54 @@ def list_employees(
     rows = session.execute(text(list_sql), params_list).mappings().all()
     total = session.execute(text(count_sql), params).scalar_one()
     return [dict(r) for r in rows], int(total)
+
+
+def iter_employees_for_export(
+    session: Session,
+    *,
+    sort: str | None,
+    q: str | None = None,
+    dept_id: list[int] | None = None,
+    country: list[str] | None = None,
+    level_id: list[int] | None = None,
+    employment_type: list[str] | None = None,
+    status: list[str] | None = None,
+    band_position: list[str] | None = None,
+    salary_band: list[str] | None = None,
+) -> Iterator[dict]:
+    """Return an iterator over rows matching the filter + sort, no pagination.
+
+    Validation (parse_sort) runs **eagerly** — if `sort` is invalid this
+    raises ValueError before any iteration starts, so the route handler
+    can convert it to a 400 instead of crashing mid-stream after
+    StreamingResponse headers have already been sent.
+
+    The inner `_iter` generator does the lazy row-by-row yield so we
+    never materialize the full result set in memory.
+    """
+    column, direction = parse_sort(sort)
+    where_body, params = build_filters(
+        q=q,
+        dept_id=dept_id,
+        country=country,
+        level_id=level_id,
+        employment_type=employment_type,
+        status=status,
+        band_position=band_position,
+        salary_band=salary_band,
+    )
+    where_clause = f"WHERE {where_body}" if where_body else ""
+    sql = (
+        f"{_LIST_COLUMNS} {_LIST_FROM} {where_clause} "
+        f"ORDER BY {column} {direction}, e.id"
+    )
+    result = session.execute(text(sql), params).mappings()
+
+    def _iter() -> Iterator[dict]:
+        for row in result:
+            yield dict(row)
+
+    return _iter()
 
 
 def get_employee_detail(session: Session, employee_id: str) -> dict | None:

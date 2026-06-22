@@ -1,13 +1,24 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, ListFilter, Search, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  ListFilter,
+  Loader2,
+  Search,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
+import { AxiosError } from "axios";
+import { toast } from "sonner";
 
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { downloadBlob, employeesApi } from "@/lib/api/employees";
 import { cn } from "@/lib/utils";
 
 import { ColumnFilter } from "./column-filter";
@@ -43,6 +54,24 @@ export function EmployeeGridToolbar({ total, isFetching }: Props) {
 
   const totalPages = Math.max(1, Math.ceil(total / state.size));
   const hasGlobalFilters = (state.employment_type?.length ?? 0) > 0;
+
+  const [downloading, setDownloading] = useState(false);
+  async function onDownload() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      // Strip page/size — the export ignores them and returns every match.
+      const { page: _p, size: _s, ...exportParams } = state;
+      const blob = await employeesApi.exportCsv(exportParams);
+      const today = new Date().toISOString().slice(0, 10);
+      downloadBlob(blob, `employees-${today}.csv`);
+    } catch (error) {
+      const ax = error as AxiosError<{ detail?: string }>;
+      toast.error(ax.response?.data?.detail ?? "Couldn't download the CSV.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <div className="my-4 flex items-center justify-between gap-3">
@@ -92,6 +121,26 @@ export function EmployeeGridToolbar({ total, isFetching }: Props) {
       </div>
 
       <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onDownload}
+          disabled={downloading || total === 0}
+          className={cn(
+            "flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-700 transition-colors",
+            "hover:bg-slate-50 hover:text-slate-900",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+          )}
+          aria-label="Download CSV of filtered employees"
+          title="Download CSV of every row matching the current filters & sort"
+        >
+          {downloading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Download className="size-3.5" />
+          )}
+          {downloading ? "Preparing…" : "CSV"}
+        </button>
+
         <span
           className={cn(
             "text-sm tabular-nums text-slate-700 transition-opacity",

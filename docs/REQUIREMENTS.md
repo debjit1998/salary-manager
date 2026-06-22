@@ -58,7 +58,7 @@ self-explanatory.
 | --- | --- |
 | Payroll execution, tax withholding, benefits | Different problem domain — this app records compensation, doesn't disburse it. |
 | Multi-tenant orgs, multiple HR users, role hierarchies | The persona is explicitly a single HR manager. Adding RBAC eats time without showing more product judgment. |
-| Bulk CSV import / export | Adds tedious UI without exercising new engineering skill. Listed as a follow-up. |
+| Bulk CSV import | Adds tedious UI without exercising new engineering skill. Listed as a follow-up. (Export of the filtered employee list **is** included — it's a single streaming endpoint, not a separate UI surface.) |
 | Live FX feeds | A fixed FX ratio table is sufficient and deterministic; live feeds add an external dependency for no user value at this scale. |
 | Mobile responsiveness | This is a desktop power-tool. Optimising for small screens dilutes the UX. |
 | Audit log UI | The `salary_changes` table **is** the audit trail; surfaced via the timeline on the employee detail page. |

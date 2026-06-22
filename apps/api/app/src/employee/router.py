@@ -6,7 +6,13 @@ plus append-only writes to the salary and equity history tables.
 
 from __future__ import annotations
 
+import csv
+import io
+from datetime import date
+from typing import Iterator
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -155,6 +161,101 @@ def list_employees(
         page=page,
         size=size,
         total=total,
+    )
+
+
+# Column order in the CSV. Header strings here also drive the header row.
+_EXPORT_COLUMNS: list[tuple[str, str]] = [
+    ("employee_no", "employee_no"),
+    ("first_name", "first_name"),
+    ("last_name", "last_name"),
+    ("email", "email"),
+    ("country", "country"),
+    ("department", "department"),
+    ("level", "level"),
+    ("employment_type", "employment_type"),
+    ("status", "status"),
+    ("hire_date", "hire_date"),
+    ("current_amount", "current_salary_amount"),
+    ("current_currency", "current_salary_currency"),
+    ("current_amount_usd", "current_salary_usd"),
+    ("current_effective_date", "salary_effective_date"),
+    ("band_position", "band_position"),
+]
+
+
+def _row_to_csv_values(row: dict) -> list[str]:
+    """Stringify a row for csv.writer — dates → ISO, None → empty string."""
+    out: list[str] = []
+    for src_key, _ in _EXPORT_COLUMNS:
+        value = row.get(src_key)
+        if value is None:
+            out.append("")
+        elif hasattr(value, "isoformat"):
+            out.append(value.isoformat())
+        else:
+            out.append(str(value))
+    return out
+
+
+# Must be declared BEFORE the `/{employee_id}` route — FastAPI matches in
+# declaration order, and otherwise `export.csv` would be parsed as an id.
+@router.get("/export.csv")
+def export_employees_csv(
+    sort: str | None = Query(None),
+    q_: str | None = Query(None, alias="q"),
+    dept_id: list[int] | None = Query(None),
+    country: list[str] | None = Query(None),
+    level_id: list[int] | None = Query(None),
+    employment_type: list[str] | None = Query(None),
+    status_: list[str] | None = Query(None, alias="status"),
+    band_position: list[str] | None = Query(None),
+    salary_band: list[str] | None = Query(None),
+    session: Session = Depends(get_session),
+    _user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export the filtered+sorted employee list as CSV.
+
+    Accepts the same query params as `GET /employees` minus page/size —
+    returns every matching row. The response streams a chunk per row so
+    we never hold the whole CSV in memory.
+    """
+    try:
+        rows_iter = q.iter_employees_for_export(
+            session,
+            sort=sort,
+            q=q_,
+            dept_id=dept_id,
+            country=country,
+            level_id=level_id,
+            employment_type=employment_type,
+            status=status_,
+            band_position=band_position,
+            salary_band=salary_band,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    def generate() -> Iterator[str]:
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+
+        writer.writerow([header for _, header in _EXPORT_COLUMNS])
+        yield buf.getvalue()
+        buf.seek(0)
+        buf.truncate()
+
+        for row in rows_iter:
+            writer.writerow(_row_to_csv_values(row))
+            yield buf.getvalue()
+            buf.seek(0)
+            buf.truncate()
+
+    filename = f"employees-{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

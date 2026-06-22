@@ -47,4 +47,27 @@ export const employeesApi = {
     api
       .post<EquityGrant>(`/employees/${id}/equity-grants`, body)
       .then((r) => r.data),
+
+  // CSV export of every row matching the current filter+sort (no pagination).
+  // Returns a Blob so the caller can trigger a browser download via
+  // a synthetic anchor. Auth + array-param serialisation come from the
+  // shared `api` client.
+  exportCsv: (
+    params: Omit<ListEmployeesParams, "page" | "size"> = {},
+  ): Promise<Blob> =>
+    api
+      .get<Blob>("/employees/export.csv", { params, responseType: "blob" })
+      .then((r) => r.data),
 };
+
+/** Trigger a browser download for a blob with the given filename. */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

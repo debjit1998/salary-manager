@@ -185,7 +185,7 @@ apps/api/
       user/
         router.py           # POST /auth/login, /auth/logout, GET /auth/me
       employee/
-        router.py           # GET/PATCH /employees, +/salary-changes, +/equity-grants
+        router.py           # GET/PATCH /employees, +/export.csv, +/salary-changes, +/equity-grants
         queries.py          # SQL + parse_sort + build_filters (multi-select aware)
         schemas.py          # Pydantic in/out models for the employee surface
       analytics/
@@ -217,6 +217,7 @@ POST   /auth/logout                           clears the session cookie
 GET    /auth/me                               current HR user
 
 GET    /employees?…                           paginated + sorted + filtered + searched
+GET    /employees/export.csv?…                streaming CSV of every row matching filter+sort
 GET    /employees/{id}                        profile + history + grants + manager
 PATCH  /employees/{id}                        update profile (dept/level/manager/type/status)
 POST   /employees/{id}/salary-changes         append-only salary history
