@@ -18,6 +18,47 @@ explicit.
 **Cost:** A bit more boilerplate for CRUD endpoints. Acceptable —
 the CRUD surface here is small.
 
+## Same-parent-domain cookies instead of `SameSite=None`
+
+**Decision:** Host the frontend at `salary.dmcodes.org` and the API at
+`salary-api.dmcodes.org`, and set the session cookie with
+`Domain=dmcodes.org` so both subdomains see it. The cookie stays
+`SameSite=Lax; Secure; HttpOnly`.
+
+**Why this exists as a decision at all:** Vercel's default URL is
+`<project>-<hash>.vercel.app`, and the API was originally going to live
+at `salary-api.dmcodes.org`. With those two **different sites**, the
+browser refuses to send the session cookie on cross-site requests
+unless the cookie is `SameSite=None; Secure`. That works, but it
+re-opens the CSRF surface that `Lax` is designed to close.
+
+The fix was to move the frontend onto `dmcodes.org` (a custom Vercel
+domain) so both subdomains share an eTLD+1 — the cookie counts as
+same-site, `Lax` works again, and a malicious origin can't ride the
+session even if CORS is misconfigured.
+
+| Approach                                           | Same-site posture  | CSRF surface           | DNS work          |
+| -------------------------------------------------- | ------------------ | ---------------------- | ----------------- |
+| Vercel default URL + `SameSite=None`               | cross-site         | wider (needs CORS + JSON-only + origin checks) | none              |
+| **Custom domain + `Domain=dmcodes.org` cookie**    | same-site          | narrow (Lax does most of the work) | one CNAME |
+
+**There's still a residual risk worth naming:** a `Domain=dmcodes.org`
+cookie is sent to **any** subdomain. If we ever stand up another
+`*.dmcodes.org` service that takes user input and reflects it, that
+service can read or fixate the session via XSS. Mitigation: keep
+`HttpOnly` (already on), and either (a) restrict the cookie to the
+exact two subdomains via a stricter `Domain` attribute (browsers don't
+support multi-domain — would need a redirect-on-login pattern), or
+(b) move to short-lived bearer tokens stored in memory once the org
+runs more than two subdomains on `dmcodes.org`. Today, with two
+controlled subdomains, the shared-cookie posture is the right point
+on the curve.
+
+**Test guard:** `tests/integration/test_auth_endpoints.py` includes an
+assertion that the `Set-Cookie` on a successful login carries
+`Domain`, `Secure`, `SameSite=Lax`, `HttpOnly` exactly as configured —
+catches anyone accidentally regressing these attributes.
+
 ## Postgres co-located on the EC2 instead of RDS
 
 **Decision:** Run Postgres in the same Docker Compose as FastAPI on a

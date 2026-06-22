@@ -115,6 +115,22 @@ middleware.ts                        # cookie-existence auth gate
    by the `(authed)` layout for the gate and by `<UserMenu />` for the
    header.
 
+## Tests
+
+Vitest + React Testing Library, smoke tests for the main page views.
+
+```bash
+npm test          # one-shot run
+npm run test:watch  # rerun on save while iterating
+```
+
+Tests are co-located with the component under test in a `__tests__/`
+subfolder (e.g. `app/login/__tests__/view.test.tsx`,
+`app/(authed)/dashboard/__tests__/view.test.tsx`) and run under jsdom.
+Heavy children (TanStack Query hooks, chart-filter dialog, NL drawer)
+are mocked at the module boundary so the tests stay focused on the
+page-level wiring.
+
 ## Adding more shadcn components
 
 Run `npx shadcn@latest add <name>` in this directory — they're

@@ -3,34 +3,57 @@
 ## System overview
 
 ```
-        ┌──────────────────┐                  ┌─────────────────────────────┐
-        │   Vercel         │   HTTPS / JSON   │   AWS EC2 (single instance) │
-        │   Next.js (App   │ ───────────────▶ │  ┌──────────────────────┐   │
-        │   Router)        │  cookie session  │  │  FastAPI (Docker)    │   │
-        │   shadcn/ui      │ ◀─────────────── │  └──────┬───────────────┘   │
-        └──────────────────┘                  │         │ asyncpg            │
-                                              │  ┌──────▼───────────────┐   │
-                                              │  │  Postgres 16 (Docker)│   │
-                                              │  └──────────────────────┘   │
-                                              └─────────┬───────────────────┘
-                                                        │ HTTPS
-                                                        ▼
-                                              api.anthropic.com  (NL query)
+   salary.dmcodes.org                   salary-api.dmcodes.org
+        Vercel                              AWS  ap-south-1
+   ┌──────────────────┐                  ┌─────────────────────────────┐
+   │   Next.js (App   │   HTTPS / JSON   │  ┌───────────────────────┐  │
+   │   Router)        │ ───────────────▶ │  │ ALB (2 AZs, ACM cert) │  │
+   │   shadcn/ui      │  Set-Cookie:     │  │ :443 ─▶ EC2:8000      │  │
+   │                  │   Domain=        │  │ :80  ─▶ 301 https     │  │
+   │                  │   dmcodes.org    │  └───────────┬───────────┘  │
+   │                  │   SameSite=Lax   │              │              │
+   │                  │   Secure;HttpOnly│  ┌───────────▼───────────┐  │
+   │                  │ ◀─────────────── │  │ EC2 t3.small          │  │
+   └──────────────────┘                  │  │ ┌─────────────────┐   │  │
+                                         │  │ │ FastAPI (Docker)│   │  │
+                                         │  │ └────────┬────────┘   │  │
+                                         │  │ ┌────────▼────────┐   │  │
+                                         │  │ │ Postgres 16     │   │  │
+                                         │  │ │ (Docker)        │   │  │
+                                         │  │ └─────────────────┘   │  │
+                                         │  └───────────────────────┘  │
+                                         └─────────────┬───────────────┘
+                                                       │ HTTPS
+                                                       ▼
+                                            api.anthropic.com (NL query)
+
+   DNS (Cloudflare, dmcodes.org zone — both grey-clouded / DNS only):
+     salary.dmcodes.org      CNAME → cname.vercel-dns.com
+     salary-api.dmcodes.org  CNAME → <ALB DNS>
 ```
 
-- **Frontend** is a Next.js (App Router) app deployed on Vercel. It holds
-  no secrets; the Anthropic API key never leaves the backend.
-- **Backend** is a FastAPI service deployed to a single EC2 via Docker
-  Compose (mirrors a prior production deploy of mine for fast turnaround).
-  Postgres is co-located on the same EC2 — fine for a 10k-row dataset
-  and a take-home; production would split it out to RDS.
-- **Instance choice: `t4g.small`** (ARM, 2 vCPU burst, 2 GB RAM) with
-  16 GB gp3 EBS and an Elastic IP, in `us-east-1`. ~$14/mo on-demand.
-  Sized for the workload (Postgres + FastAPI + Docker overhead want
-  ~700 MB RAM at idle, leaves headroom for query bursts and image
-  pulls during deploys). `t4g.micro` would save $6/mo but leaves
-  Postgres uncomfortably close to the OOM line. Reasoning written up
-  in `TRADEOFFS.md`.
+- **Frontend** is a Next.js (App Router) app deployed on Vercel under a
+  custom domain (`salary.dmcodes.org`). It holds no secrets; the
+  Anthropic API key never leaves the backend.
+- **Backend** is a FastAPI service deployed to a single EC2 in
+  `ap-south-1`, behind an internet-facing Application Load Balancer with
+  an ACM cert for `salary-api.dmcodes.org`. Postgres runs in the same
+  `docker compose` stack on the EC2 — fine for a 10k-row dataset and a
+  take-home; production would split it out to RDS.
+- **Why an ALB and not just an EC2 with an Elastic IP:** TLS termination
+  with an ACM cert (no Let's Encrypt renewal to babysit), a stable DNS
+  name decoupled from the instance, and a target group that makes
+  blue/green instance swaps trivial.
+- **Instance choice: `t3.small`** (x86, 2 vCPU burst, 2 GB RAM) with
+  20 GB gp3 EBS, in `ap-south-1a`. Sized for the workload (Postgres +
+  FastAPI + Docker overhead want ~700 MB RAM at idle, leaves headroom
+  for query bursts and image pulls during deploys). `t3.micro` would
+  save $7/mo but leaves Postgres uncomfortably close to the OOM line.
+  Reasoning written up in `TRADEOFFS.md`.
+- **Frontend and API share `dmcodes.org` as their eTLD+1**, and the
+  session cookie is set with `Domain=dmcodes.org` so both subdomains
+  see it. That keeps `SameSite=Lax` (proper CSRF posture) instead of
+  dropping to `SameSite=None`. Trade-off written up in `TRADEOFFS.md`.
 - **Secrets** (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `JWT_SECRET`,
   `HR_USER_PASSWORD`, the Postgres creds) live in **GitHub Encrypted
   Secrets** and are injected into the deploy job at run time. The
@@ -271,13 +294,21 @@ traffic.
 
 ## Test strategy
 
-- **Backend (pytest):** analytics tools individually with a seeded test
-  DB; auth happy-path + wrong-password + expired-token; NL routing
-  with Anthropic mocked; sqlglot guard with known-bad inputs.
-- **Frontend (Vitest + RTL):** login form, employees table, NL chat
-  rendering for the two response shapes (rows vs. chart).
-- **End-to-end:** one Playwright smoke that logs in, lists employees,
-  opens detail, and runs an NL query.
+- **Backend (pytest):** 120 tests across `tests/unit/` and
+  `tests/integration/`. Unit suite covers the pure helpers
+  (sort/filter parser, sqlglot guard, schema-prompt builder, auth
+  primitives, analytics helpers). Integration suite hits every endpoint
+  against a real seeded Postgres in a SAVEPOINT-rolled-back transaction
+  — auth happy-path + wrong-password + cookie attributes, employees
+  filter/sort/search/CSV-export, analytics aggregates, NL routing with
+  Anthropic mocked.
+- **Frontend (Vitest + RTL):** smoke tests for the main page views —
+  co-located with each component in a `__tests__/` subfolder
+  (`app/login/__tests__/view.test.tsx`,
+  `app/(authed)/dashboard/__tests__/view.test.tsx`). Run with `npm test`.
+- **End-to-end:** not in scope for the take-home. The integration
+  suite + the two FE smoke tests catch the cross-cutting regressions
+  I've actually seen during development.
 
 ## Performance considerations
 

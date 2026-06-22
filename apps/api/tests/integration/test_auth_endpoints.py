@@ -46,6 +46,41 @@ def test_login_sets_cookie_and_me_returns_user(
     assert me.json()["email"] == test_user["email"]
 
 
+def test_login_cookie_carries_configured_domain_and_secure(
+    client: TestClient,
+    test_user: dict[str, str],
+    monkeypatch,
+) -> None:
+    """Regression guard for the prod-deploy bug we hit at first launch.
+
+    With the frontend on `salary.dmcodes.org` and the API on
+    `salary-api.dmcodes.org`, the session cookie MUST be set with
+    Domain=dmcodes.org + Secure + SameSite=Lax + HttpOnly. Anything
+    else makes the Next.js middleware on the frontend domain unable to
+    see the cookie and bounces every authed page back to /login.
+
+    This test mutates `settings` to simulate the prod config, exercises
+    /auth/login, and asserts every relevant attribute appears verbatim
+    on Set-Cookie.
+    """
+    monkeypatch.setattr(settings, "cookie_secure", True)
+    monkeypatch.setattr(settings, "cookie_domain", "dmcodes.org")
+
+    r = client.post(
+        "/auth/login",
+        json={"email": test_user["email"], "password": test_user["password"]},
+    )
+    assert r.status_code == 200
+
+    set_cookie = r.headers.get("set-cookie", "")
+    # All four prod-required attributes present
+    assert f"{COOKIE_NAME}=" in set_cookie
+    assert "Domain=dmcodes.org" in set_cookie
+    assert "Secure" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=lax" in set_cookie
+
+
 def test_login_wrong_password_returns_401(
     client: TestClient, test_user: dict[str, str]
 ) -> None:
