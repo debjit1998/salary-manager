@@ -63,6 +63,7 @@ def login(
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
+        domain=settings.cookie_domain,
         max_age=settings.jwt_expires_minutes * 60,
         path="/",
     )
@@ -76,6 +77,7 @@ def logout(response: Response) -> dict[str, bool]:
         path="/",
         secure=settings.cookie_secure,
         samesite="lax",
+        domain=settings.cookie_domain,
     )
     return {"ok": True}
 

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # set True in prod (where the frontend is over https). Without this
     # the cookie won't be sent cross-origin from the Vercel app.
     cookie_secure: bool = False
+    cookie_domain: str | None = None
 
     cors_origins: str = "http://localhost:3000"
 
