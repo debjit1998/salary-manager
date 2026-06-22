@@ -141,7 +141,10 @@ jobs:
                 ("echo " + $envb64 + " | base64 -d > /opt/salary/.env"),
                 ("aws ecr get-login-password --region " + $region + " | docker login --username AWS --password-stdin " + $account + ".dkr.ecr." + $region + ".amazonaws.com"),
                 "docker compose -f docker-compose.prod.yml --env-file .env pull",
-                # One-shot migration. --no-deps avoids spinning the api container before alembic.
+                # Bring db up and wait for the healthcheck before running one-shots.
+                # --wait blocks until `service_healthy` is satisfied per the compose file.
+                "docker compose -f docker-compose.prod.yml --env-file .env up -d --wait db",
+                # One-shot migration against the now-healthy db.
                 "docker compose -f docker-compose.prod.yml --env-file .env run --rm --no-deps api alembic upgrade head",
                 # Idempotent seed — skips if the employees table is already populated.
                 "docker compose -f docker-compose.prod.yml --env-file .env run --rm --no-deps api python -m scripts.seed",
